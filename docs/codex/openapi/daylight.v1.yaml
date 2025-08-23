@@ -1,0 +1,106 @@
+openapi: 3.0.3
+info:
+  title: Daylight API
+  version: "1.0.0"
+servers:
+  - url: https://api.daylight.example.com
+paths:
+  /trips:
+    post:
+      summary: Create a new trip
+      operationId: createTrip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripCreate'
+      responses:
+        '200':
+          description: Trip created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  tripId:
+                    type: string
+    get:
+      summary: Get a trip by id
+      operationId: getTrip
+      parameters:
+        - in: query
+          name: tripId
+          schema: { type: string }
+          required: true
+      responses:
+        '200':
+          description: Trip found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '404':
+          description: Not found
+  /plan:
+    get:
+      summary: Get suggestions for a trip
+      operationId: getPlan
+      parameters:
+        - in: query
+          name: suggestFor
+          required: true
+          schema: { type: string }
+        - in: query
+          name: now
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Suggestion'
+components:
+  schemas:
+    TripCreate:
+      type: object
+      required: [tripId]
+      properties:
+        tripId: { type: string }
+        name: { type: string }
+        anchors:
+          type: array
+          items: { $ref: '#/components/schemas/Anchor' }
+    Trip:
+      allOf:
+        - $ref: '#/components/schemas/TripCreate'
+        - type: object
+          properties:
+            createdAt: { type: string, format: date-time }
+    Anchor:
+      type: object
+      required: [id, name, start, end, lat, lng]
+      properties:
+        id:   { type: string }
+        name: { type: string }
+        start:{ type: string, format: date-time }
+        end:  { type: string, format: date-time }
+        lat:  { type: number }
+        lng:  { type: number }
+        locked: { type: boolean }
+    Suggestion:
+      type: object
+      required: [id, title, start, end, score]
+      properties:
+        id:    { type: string }
+        title: { type: string }
+        start: { type: string, format: date-time }
+        end:   { type: string, format: date-time }
+        score: { type: number }
+        reason:{ type: string }

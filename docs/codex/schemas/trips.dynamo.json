@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Trips DynamoDB Schema (Logical)",
+  "type": "object",
+  "required": [
+    "tripId",
+    "createdAt"
+  ],
+  "properties": {
+    "tripId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "anchors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Anchor"
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "properties": {
+        "heatMaxF": {
+          "type": "number"
+        },
+        "driveCapMin": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Anchor": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "start",
+        "end",
+        "lat",
+        "lng"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lat": {
+          "type": "number"
+        },
+        "lng": {
+          "type": "number"
+        },
+        "locked": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

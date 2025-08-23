@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Daylight Domain Types",
+  "type": "object",
+  "properties": {
+    "Weights": {
+      "type": "object",
+      "required": [
+        "interest",
+        "weather",
+        "time",
+        "drive",
+        "crowd",
+        "serendipity"
+      ],
+      "properties": {
+        "interest": {
+          "type": "number"
+        },
+        "weather": {
+          "type": "number"
+        },
+        "time": {
+          "type": "number"
+        },
+        "drive": {
+          "type": "number"
+        },
+        "crowd": {
+          "type": "number"
+        },
+        "serendipity": {
+          "type": "number"
+        }
+      }
+    },
+    "Candidate": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "start",
+        "end",
+        "distanceMin"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer"
+        },
+        "end": {
+          "type": "integer"
+        },
+        "distanceMin": {
+          "type": "number"
+        },
+        "comfortIndex": {
+          "type": "number"
+        },
+        "windowFit": {
+          "type": "number"
+        },
+        "crowdIndex": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}
