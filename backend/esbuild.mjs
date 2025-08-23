@@ -1,6 +1,7 @@
 import { build } from 'esbuild'
 import { execSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
+import path from 'node:path'
 
 mkdirSync('dist', { recursive: true })
 
@@ -14,6 +15,24 @@ await build({
   minify: true
 })
 
-execSync('cd dist && zip -qr trips.zip trips.js', { stdio: 'inherit' })
-execSync('cd dist && zip -qr plan.zip plan.js', { stdio: 'inherit' })
+function zipFile(srcFile, destZip) {
+  const absSrc = path.resolve(srcFile)
+  const absDest = path.resolve(destZip)
+  if (process.platform === 'win32') {
+    // Use built-in PowerShell zip on Windows
+    execSync(
+      `powershell -NoProfile -NonInteractive -Command "Compress-Archive -Path '${absSrc}' -DestinationPath '${absDest}' -Force"`,
+      { stdio: 'inherit' }
+    )
+  } else {
+    // Use zip CLI on macOS/Linux
+    execSync(`zip -qr ${absDest} ${path.basename(absSrc)}`, {
+      stdio: 'inherit',
+      cwd: path.dirname(absSrc),
+    })
+  }
+}
+
+zipFile('dist/trips.js', 'dist/trips.zip')
+zipFile('dist/plan.js', 'dist/plan.zip')
 console.log('Built Lambda zips')
