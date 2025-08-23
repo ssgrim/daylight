@@ -137,3 +137,17 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+# Terraform
+infra/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfstate.d/
+crash.log
+override.tf
+# Node
+node_modules/
+frontend/dist/
+backend/dist/
+# OS/Editor
+.DS_Store
+.vscode/

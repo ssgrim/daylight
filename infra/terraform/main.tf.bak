@@ -16,9 +16,7 @@ resource "random_pet" "suffix" {
 
 # --- S3 + CloudFront for SPA ---
 resource "aws_s3_bucket" "frontend" {
-  # include region to avoid cross-region conflicts
-  bucket        = "daylight-frontend-${var.region}-${random_pet.suffix.id}"
-  force_destroy = true
+  bucket = "daylight-frontend-${random_pet.suffix.id}"
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {

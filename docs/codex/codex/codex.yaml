@@ -1,0 +1,40 @@
+version: 1
+project: Daylight
+description: Cloud-first trip planning app with live re-planning (AWS + React + Terraform)
+tech_stack:
+  frontend: [react, typescript, vite, tailwind, zustand, mapbox-gl-js]
+  backend: [aws-lambda, node20, typescript, api-gateway, dynamodb]
+  infra: [terraform, s3, cloudfront, apigw, lambda, dynamodb]
+principles:
+  - security-first
+  - privacy-by-design
+  - typed-interfaces
+  - fast-feedback
+  - testable-units
+inputs:
+  openapi: openapi/daylight.v1.yaml
+  schemas:
+    - schemas/trips.dynamo.json
+    - schemas/domain.json
+tasks:
+  - id: FE-001
+    title: Integrate Mapbox map + anchors UI
+    file: codex/tasks/FE-001-mapbox-anchors.md
+  - id: BE-001
+    title: Implement /trips persistence (DynamoDB)
+    file: codex/tasks/BE-001-trips-dynamo.md
+  - id: BE-002
+    title: Implement /plan suggestion assembly using scoring engine
+    file: codex/tasks/BE-002-plan-engine.md
+  - id: CI-001
+    title: Add GitHub Actions for lint/test/build and SPA deploy
+    file: codex/tasks/CI-001-gh-actions.md
+  - id: INF-001
+    title: Terraform outputs + variables cleanup and DynamoDB perms
+    file: codex/tasks/INF-001-tf-cleanup.md
+acceptance_criteria:
+  - front and back build scripts succeed
+  - API conforms to OpenAPI document
+  - DynamoDB writes and reads verified by integration test
+  - basic unit tests for scoring and handlers present
+  - frontend shows live map and renders suggestions
