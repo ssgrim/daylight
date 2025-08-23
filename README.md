@@ -1,3 +1,3 @@
-# Daylight Scaffold
+# Daylight
 
-Initial scaffold for frontend, backend, infra.
+Cloud-first trip planning and live re-planning engine.
