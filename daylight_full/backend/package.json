@@ -1,0 +1,19 @@
+{
+  "name": "daylight-backend",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.640.0",
+    "@aws-sdk/lib-dynamodb": "^3.640.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.137",
+    "esbuild": "^0.23.1",
+    "typescript": "^5.6.2"
+  }
+}
