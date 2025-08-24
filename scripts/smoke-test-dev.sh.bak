@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# -------- Settings --------
+REGION="${REGION:-us-west-1}"
+ACCOUNT_ID="${ACCOUNT_ID:-}"
+LAMBDA_NAME="${LAMBDA_NAME:-daylight-places}"
+API_NAME="${API_NAME:-daylight-http}"
+FRONTEND_DIR="${FRONTEND_DIR:-frontend}"   # change if your vite app lives elsewhere
+SECRET_ARN="${SECRET_ARN:-}"
+DEV_BUCKET="${DEV_BUCKET:-}"                # optional: pre-set to your DEV S3 bucket name
+DEV_DIST_ID="${DEV_DIST_ID:-}"              # optional: pre-set to your DEV CloudFront dist id
+REPORT="artifacts/report.md"
+API_JSON="artifacts/api.json"
+DEV_API_JSON="artifacts/dev-api.json"
+DEV_INDEX_HTML="artifacts/dev-site.html"
+
+pass() { echo "✅ $1"; }
+fail() { echo "❌ $1"; }
+sec()  { echo -e "\n=== $1 ==="; }
+
+echo "# Daylight Smoke Test (DEV) — $(date -u +"%Y-%m-%d %H:%M:%S UTC")" > "$REPORT"
+
+sec "Prerequisites"
+if ! command -v aws >/dev/null 2>&1; then fail "aws CLI missing"; exit 1; fi
+if ! command -v node >/dev/null 2>&1; then fail "node missing"; exit 1; fi
+if ! command -v jq >/dev/null 2>&1; then
+  fail "jq not found (needed for JSON). Install or add to container."
+  exit 1
+fi
+pass "aws/node/jq present"
+
+AWS_ID_JSON=$(aws sts get-caller-identity || true)
+if [ -z "$AWS_ID_JSON" ]; then fail "AWS auth failed"; exit 1; fi
+ACCOUNT_ID="${ACCOUNT_ID:-$(echo "$AWS_ID_JSON" | jq -r .Account)}"
+pass "AWS account: $ACCOUNT_ID"
+
+sec "Ensure Lambda package (backend/places.js -> build/places.zip)"
+mkdir -p build
+if [ ! -f backend/places.js ]; then
+  fail "backend/places.js not found"; exit 1
+fi
+
+# Try bestzip (no sudo/pip needed). Fallback to node zlib if npx not available.
+if command -v npx >/dev/null 2>&1; then
+  npx --yes bestzip build/places.zip backend/places.js >/dev/null
+else
+  node - <<'PKG'
+const fs=require('fs'), zlib=require('zlib');
+const archiver=require('archiver'); // may not exist; user should have npx bestzip ideally
+PKG
+fi
+
+if [ ! -f build/places.zip ]; then
+  # portable fallback using PowerShell on Windows containers; ignore if not available
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -Command "Compress-Archive -Force -Path 'backend/places.js' -DestinationPath 'build/places.zip'" || true
+  fi
+fi
+[ -f build/places.zip ] && pass "Created build/places.zip" || { fail "Could not create build/places.zip"; exit 1; }
+
+sec "Ensure IAM role daylight-lambda-exec with trust & policies"
+TRUST_JSON='{
+  "Version": "2012-10-17",
+  "Statement": [{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]
+}'
+if ! aws iam get-role --role-name daylight-lambda-exec >/dev/null 2>&1; then
+  echo "$TRUST_JSON" > .tmp-trust.json
+  aws iam create-role --role-name daylight-lambda-exec --assume-role-policy-document file://.tmp-trust.json >/dev/null
+else
+  echo "$TRUST_JSON" > .tmp-trust.json
+  aws iam update-assume-role-policy --role-name daylight-lambda-exec --policy-document file://.tmp-trust.json >/dev/null
+fi
+aws iam attach-role-policy --role-name daylight-lambda-exec --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole >/dev/null || true
+
+# Inline policy to read secret
+if [ -z "$SECRET_ARN" ]; then
+  SECRET_ARN="arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:daylight/dev/google-places-api-key*"
+fi
+cat > .tmp-secret-pol.json <<POL
+{
+  "Version":"2012-10-17",
+  "Statement":[
+    {"Sid":"ReadPlacesSecret","Effect":"Allow","Action":["secretsmanager:GetSecretValue"],"Resource":"${SECRET_ARN}"},
+    {"Sid":"KmsDecrypt","Effect":"Allow","Action":["kms:Decrypt"],"Resource":"*"}
+  ]
+}
+POL
+aws iam put-role-policy --role-name daylight-lambda-exec --policy-name ReadPlacesSecretInline --policy-document file://.tmp-secret-pol.json >/dev/null
+pass "Role configured"
+
+sec "Create or update Lambda ${LAMBDA_NAME}"
+if ! aws lambda get-function --region "$REGION" --function-name "$LAMBDA_NAME" >/dev/null 2>&1; then
+  ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/daylight-lambda-exec"
+  aws lambda create-function \
+    --region "$REGION" \
+    --function-name "$LAMBDA_NAME" \
+    --runtime nodejs18.x \
+    --handler places.handler \
+    --role "$ROLE_ARN" \
+    --zip-file fileb://build/places.zip >/dev/null
+  pass "Created Lambda"
+else
+  aws lambda update-function-code --region "$REGION" --function-name "$LAMBDA_NAME" --zip-file fileb://build/places.zip >/dev/null
+  pass "Updated Lambda code"
+fi
+
+sec "Ensure HTTP API ${API_NAME} + route GET /api/places"
+API_ID=$(aws apigatewayv2 get-apis --region "$REGION" --query "Items[?Name=='${API_NAME}'].ApiId" --output text 2>/dev/null || true)
+if [ -z "$API_ID" ] || [ "$API_ID" = "None" ]; then
+  API_ID=$(aws apigatewayv2 create-api --region "$REGION" --name "$API_NAME" --protocol-type HTTP --query ApiId --output text)
+  pass "Created API ($API_ID)"
+fi
+
+# Integration
+LAMBDA_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${LAMBDA_NAME}"
+INT_ID=$(aws apigatewayv2 create-integration \
+  --region "$REGION" --api-id "$API_ID" \
+  --integration-type AWS_PROXY \
+  --integration-uri "$LAMBDA_ARN" \
+  --payload-format-version 2.0 \
+  --query IntegrationId --output text 2>/dev/null || true)
+
+# Route (ignore if exists)
+aws apigatewayv2 create-route --region "$REGION" --api-id "$API_ID" --route-key "GET /api/places" --target "integrations/$INT_ID" >/dev/null 2>&1 || true
+
+# Permission
+aws lambda add-permission \
+  --region "$REGION" \
+  --function-name "$LAMBDA_NAME" \
+  --statement-id AllowInvokeFromHttpApi$(date +%s) \
+  --action lambda:InvokeFunction \
+  --principal apigateway.amazonaws.com \
+  --source-arn "arn:aws:execute-api:${REGION}:${ACCOUNT_ID}:${API_ID}/*/*/api/places" >/dev/null 2>&1 || true
+
+aws apigatewayv2 create-deployment --region "$REGION" --api-id "$API_ID" >/dev/null
+API_URL=$(aws apigatewayv2 get-api --region "$REGION" --api-id "$API_ID" --query ApiEndpoint --output text)
+echo "- API_URL: ${API_URL}" >> "$REPORT"
+pass "API deployed: $API_URL"
+
+sec "Test backend endpoint"
+set +e
+HTTP_STATUS=$(curl -s -o "$API_JSON" -w "%{http_code}" "$API_URL/api/places?query=pasadena%20coffee")
+set -e
+if [ "$HTTP_STATUS" = "200" ]; then pass "Backend OK (200). Saved to $API_JSON"; else fail "Backend returned $HTTP_STATUS"; fi
+
+sec "Build frontend"
+if [ -d "$FRONTEND_DIR" ]; then
+  pushd "$FRONTEND_DIR" >/dev/null
+  # Wire API base for build
+  echo "VITE_API_BASE=$API_URL" > .env.production
+  npm ci || npm install
+  if npm run build; then
+    pass "Frontend built"
+  else
+    fail "Frontend build failed"; exit 1
+  fi
+  popd >/dev/null
+else
+  fail "Frontend dir '$FRONTEND_DIR' not found"; exit 1
+fi
+
+sec "Deploy to S3 (DEV)"
+if [ -z "$DEV_BUCKET" ] || ! aws s3 ls "s3://$DEV_BUCKET" >/dev/null 2>&1; then
+  # Try to discover a dev bucket
+  DEV_BUCKET=$(aws s3 ls | awk '{print $3}' | grep -Ei 'daylight.*dev|dev.*daylight' | head -n1 || true)
+fi
+if [ -z "$DEV_BUCKET" ]; then
+  # Create a bucket name (US West 1)
+  RAND=$RANDOM
+  DEV_BUCKET="daylight-dev-site-${RAND}"
+  aws s3api create-bucket --bucket "$DEV_BUCKET" --region "$REGION" --create-bucket-configuration LocationConstraint="$REGION" >/dev/null
+  pass "Created bucket s3://$DEV_BUCKET"
+fi
+aws s3 sync "${FRONTEND_DIR}/dist" "s3://$DEV_BUCKET/" --delete >/dev/null
+pass "Uploaded site to s3://$DEV_BUCKET/"
+
+sec "CloudFront invalidation (optional)"
+if [ -z "${DEV_DIST_ID:-}" ]; then
+  # Try to find a distribution whose comment or domain implies dev
+  DEV_DIST_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?contains(Comment, 'dev') || contains(DomainName, 'dev')].Id" --output text 2>/dev/null || true)
+fi
+if [ -n "${DEV_DIST_ID:-}" ] && [ "$DEV_DIST_ID" != "None" ]; then
+  aws cloudfront create-invalidation --distribution-id "$DEV_DIST_ID" --paths "/*" >/dev/null
+  CF_URL=$(aws cloudfront get-distribution --id "$DEV_DIST_ID" --query "Distribution.DomainName" --output text)
+  echo "- DEV CloudFront: https://${CF_URL}" >> "$REPORT"
+  pass "Invalidated CloudFront ($DEV_DIST_ID) → https://${CF_URL}"
+  # Validate via CloudFront if route exists there (proxy /api/*) else via API_URL
+  set +e
+  curl -s -o "$DEV_INDEX_HTML" -w "%{http_code}" "https://${CF_URL}/" >/dev/null
+  curl -s -o "$DEV_API_JSON" -w "%{http_code}" "https://${CF_URL}/api/places?query=pasadena%20coffee" >/dev/null
+  set -e
+else
+  pass "No DEV CloudFront ID provided/found. You can still access S3 via website/static or use API directly."
+fi
+
+sec "CORS/header snapshot"
+HDRS=$(curl -s -D - "$API_URL/api/places?query=pasadena%20coffee" -o /dev/null | tr -d '\r')
+echo -e "```\n$HDRS\n```" >> "$REPORT"
+pass "Captured API headers"
+
+sec "Summary"
+echo -e "\n## Summary\n- API: ${API_URL}\n- S3 Bucket: s3://${DEV_BUCKET}/\n- API sample: ${API_JSON}\n" >> "$REPORT"
+pass "Report written to $REPORT"
+
+echo -e "\nDone."

@@ -1,6 +1,6 @@
 'use strict';
 
-// AWS SDK v2 is available in Lambda Node 18 runtime
+// AWS SDK v2 ships in Lambda Node 18
 const AWS = require('aws-sdk');
 const sm = new AWS.SecretsManager();
 
@@ -39,8 +39,7 @@ exports.handler = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        // TODO: tighten this in prod to your DEV/PROD domains
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': '*',   // tighten in prod
         'Access-Control-Allow-Methods': 'GET,OPTIONS'
       },
       body: JSON.stringify({ query: q, count: results.length, results })
