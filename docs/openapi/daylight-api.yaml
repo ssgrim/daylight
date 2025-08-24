@@ -1,0 +1,293 @@
+openapi: 3.0.3
+info:
+  title: Daylight API
+  description: |
+    Cloud-first trip planning and live re-planning engine API.
+    
+    ## Features
+    - Hardened external API calls with timeout and retry
+    - Multi-layer caching (LRU + optional DynamoDB)
+    - Input validation and standardized error responses
+    - Cache-control headers for optimal performance
+    
+  version: 0.2.0
+  contact:
+    name: Daylight API Support
+    url: https://github.com/ssgrim/daylight
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.daylight.example.com
+    description: Production server
+  - url: https://api-dev.daylight.example.com
+    description: Development server
+
+paths:
+  /places:
+    get:
+      summary: Search for places
+      description: |
+        Search for places using Google Places API with caching.
+        Results are cached for 1 hour to reduce API costs.
+      operationId: searchPlaces
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Search query for places (1-120 characters)
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+            example: "coffee shops in downtown"
+      responses:
+        '200':
+          description: Successful response with place results
+          headers:
+            Cache-Control:
+              description: Cache control directive
+              schema:
+                type: string
+                example: "public, max-age=3600, s-maxage=3600"
+            X-Cache:
+              description: Cache status
+              schema:
+                type: string
+                enum: [HIT, MISS]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacesResponse'
+        '400':
+          description: Invalid input parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '502':
+          description: External service error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '504':
+          description: Gateway timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /plan:
+    get:
+      summary: Get trip planning suggestions
+      description: |
+        Get location-based trip planning suggestions.
+        Results are cached for 30 minutes based on location.
+      operationId: getPlanSuggestions
+      parameters:
+        - name: lat
+          in: query
+          required: false
+          description: Latitude coordinate (-90 to 90)
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+            example: 37.7749
+        - name: lng
+          in: query
+          required: false
+          description: Longitude coordinate (-180 to 180)
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+            example: -122.4194
+      responses:
+        '200':
+          description: Successful response with plan suggestions
+          headers:
+            Cache-Control:
+              description: Cache control directive
+              schema:
+                type: string
+                example: "public, max-age=1800, s-maxage=1800"
+            X-Cache:
+              description: Cache status
+              schema:
+                type: string
+                enum: [HIT, MISS]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanResponse'
+        '400':
+          description: Invalid input parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  schemas:
+    Location:
+      type: object
+      required:
+        - lat
+        - lng
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+          description: Latitude coordinate
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
+          description: Longitude coordinate
+      example:
+        lat: 37.7749
+        lng: -122.4194
+
+    PlaceResult:
+      type: object
+      required:
+        - name
+        - address
+        - place_id
+      properties:
+        name:
+          type: string
+          description: Name of the place
+          example: "Blue Bottle Coffee"
+        address:
+          type: string
+          description: Formatted address
+          example: "66 Mint St, San Francisco, CA 94103, USA"
+        rating:
+          type: number
+          minimum: 0
+          maximum: 5
+          description: Google Places rating (0-5)
+          example: 4.5
+        place_id:
+          type: string
+          description: Google Places unique identifier
+          example: "ChIJN1t_tDeuEmsRUsoyG83frY4"
+        location:
+          $ref: '#/components/schemas/Location'
+
+    PlacesResponse:
+      type: object
+      required:
+        - query
+        - count
+        - results
+      properties:
+        query:
+          type: string
+          description: Original search query
+          example: "coffee shops in downtown"
+        count:
+          type: integer
+          minimum: 0
+          description: Number of results returned
+          example: 5
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaceResult'
+          description: Array of place results
+
+    PlanSuggestion:
+      type: object
+      required:
+        - id
+        - title
+        - start
+        - end
+        - score
+      properties:
+        id:
+          type: string
+          description: Unique suggestion identifier
+          example: "1"
+        title:
+          type: string
+          description: Suggestion title
+          example: "Demo Stop near 37.775,-122.419"
+        start:
+          type: string
+          format: date-time
+          description: Suggested start time (ISO 8601)
+          example: "2025-08-24T15:30:00.000Z"
+        end:
+          type: string
+          format: date-time
+          description: Suggested end time (ISO 8601)
+          example: "2025-08-24T16:30:00.000Z"
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Suggestion score (0-100, higher is better)
+          example: 95
+        location:
+          $ref: '#/components/schemas/Location'
+        description:
+          type: string
+          description: Optional description of the suggestion
+          example: "Popular coffee shop with great reviews"
+
+    PlanResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/PlanSuggestion'
+      description: Array of trip planning suggestions
+
+    ApiError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error summary
+          example: "External service error"
+        message:
+          type: string
+          description: Detailed error message
+          example: "Google Places API returned status 503"
+        type:
+          type: string
+          enum: [validation_error, external_service_error, internal_error]
+          description: Error type category
+          example: "external_service_error"
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/ApiError'
+        - type: object
+          properties:
+            field:
+              type: string
+              description: Field that failed validation
+              example: "query"
+            type:
+              type: string
+              enum: [validation_error]
+              example: "validation_error"
+          example:
+            error: "Validation failed"
+            message: "Query parameter must be 120 characters or less"
+            field: "query"
+            type: "validation_error"

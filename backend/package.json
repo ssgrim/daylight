@@ -4,16 +4,20 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
+    "dev": "node dev-server.mjs",
     "build": "node esbuild.mjs",
     "test": "node --test"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.640.0",
-    "@aws-sdk/lib-dynamodb": "^3.640.0"
+    "@aws-sdk/client-dynamodb": "^3.651.1",
+    "@aws-sdk/lib-dynamodb": "^3.651.1",
+    "@sentry/aws-serverless": "^8.28.0",
+    "@sentry/node": "^8.28.0"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.137",
-    "esbuild": "^0.23.1",
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^22.5.4",
+    "esbuild": "^0.24.0",
     "typescript": "^5.6.2"
   }
 }

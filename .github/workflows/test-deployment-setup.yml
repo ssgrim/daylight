@@ -1,0 +1,132 @@
+name: Test Deployment Setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - prod
+
+env:
+  AWS_REGION: us-west-1
+
+jobs:
+  test-setup:
+    name: Test AWS Credentials and Resources
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Test AWS credentials
+      run: |
+        echo "🔑 Testing AWS credentials..."
+        aws sts get-caller-identity
+        echo "✅ AWS credentials working"
+        
+    - name: Test Lambda functions access
+      run: |
+        echo "📦 Testing Lambda functions access..."
+        
+        # Test trips function
+        aws lambda get-function --function-name "daylight-trips-${{ github.event.inputs.environment }}" > /dev/null
+        echo "✅ trips function accessible"
+        
+        # Test plan function
+        aws lambda get-function --function-name "daylight-plan-${{ github.event.inputs.environment }}" > /dev/null
+        echo "✅ plan function accessible"
+        
+    - name: Test S3 bucket access
+      run: |
+        echo "📂 Testing S3 bucket access..."
+        BUCKET_NAME="${{ secrets.DEV_S3_BUCKET_NAME }}"
+        
+        if [ -z "$BUCKET_NAME" ]; then
+          echo "❌ DEV_S3_BUCKET_NAME secret not set"
+          exit 1
+        fi
+        
+        aws s3 ls "s3://$BUCKET_NAME/" > /dev/null
+        echo "✅ S3 bucket accessible: $BUCKET_NAME"
+        
+    - name: Test CloudFront distribution access
+      run: |
+        echo "🌐 Testing CloudFront distribution access..."
+        DISTRIBUTION_ID="${{ secrets.DEV_CLOUDFRONT_DISTRIBUTION_ID }}"
+        
+        if [ -z "$DISTRIBUTION_ID" ]; then
+          echo "❌ DEV_CLOUDFRONT_DISTRIBUTION_ID secret not set"
+          exit 1
+        fi
+        
+        aws cloudfront get-distribution --id "$DISTRIBUTION_ID" > /dev/null
+        echo "✅ CloudFront distribution accessible: $DISTRIBUTION_ID"
+        
+    - name: Test API endpoint
+      run: |
+        echo "🚀 Testing API endpoint..."
+        API_URL="${{ secrets.DEV_API_BASE_URL }}"
+        
+        if [ -z "$API_URL" ]; then
+          echo "❌ DEV_API_BASE_URL secret not set"
+          exit 1
+        fi
+        
+        echo "Testing: $API_URL/health"
+        response=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health" || echo "000")
+        
+        if [ "$response" = "200" ]; then
+          echo "✅ API endpoint responding: $API_URL"
+        else
+          echo "⚠️  API endpoint returned HTTP $response (might be expected if not deployed yet)"
+        fi
+        
+    - name: Test frontend domain
+      run: |
+        echo "🌍 Testing frontend domain..."
+        DOMAIN="${{ secrets.DEV_DOMAIN_NAME }}"
+        
+        if [ -z "$DOMAIN" ]; then
+          echo "❌ DEV_DOMAIN_NAME secret not set"
+          exit 1
+        fi
+        
+        echo "Testing: https://$DOMAIN"
+        response=$(curl -s -o /dev/null -w "%{http_code}" "https://$DOMAIN" || echo "000")
+        
+        if [ "$response" = "200" ]; then
+          echo "✅ Frontend responding: https://$DOMAIN"
+        else
+          echo "⚠️  Frontend returned HTTP $response (might be expected if not deployed yet)"
+        fi
+        
+    - name: Summary
+      run: |
+        echo ""
+        echo "🎉 Deployment setup test completed!"
+        echo ""
+        echo "✅ Verified components:"
+        echo "  • AWS credentials"
+        echo "  • Lambda functions access"
+        echo "  • S3 bucket access"
+        echo "  • CloudFront distribution access"
+        echo "  • API endpoint configuration"
+        echo "  • Frontend domain configuration"
+        echo ""
+        echo "🚀 Ready for automated deployment!"
+        echo ""
+        echo "Next step: Push to 'dev' branch to trigger deployment"

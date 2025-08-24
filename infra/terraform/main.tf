@@ -1,231 +1,225 @@
+# Daylight Infrastructure - Modular Configuration
+# This file orchestrates all infrastructure modules
+
 terraform {
   required_version = ">= 1.6.0"
   required_providers {
-    aws    = { source = "hashicorp/aws", version = "~> 4.67",    version = "~> 4.67" }
-    random = { source = "hashicorp/random", version = "~> 3.6" }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
+  }
+
+  # Optional: Configure remote state
+  # backend "s3" {
+  #   bucket = "your-terraform-state-bucket"
+  #   key    = "daylight/terraform.tfstate"
+  #   region = "us-west-1"
+  # }
+}
+
+# Configure the AWS Provider
+provider "aws" {
+  region = var.aws_region
+
+  # Optional: Default tags for all resources
+  default_tags {
+    tags = {
+      Project     = var.project_name
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Owner       = var.owner
+    }
   }
 }
 
-provider "aws" {
-  region = var.region
-}
-
+# Random suffix for unique resource names
 resource "random_pet" "suffix" {
   length = 2
 }
 
-# --- S3 + CloudFront for SPA ---
-resource "aws_s3_bucket" "frontend" {
-  # include region to avoid cross-region conflicts
-  bucket        = "daylight-frontend-${var.region}-${random_pet.suffix.id}"
-  force_destroy = true
-}
-
-resource "aws_s3_bucket_public_access_block" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_cloudfront_origin_access_control" "oac" {
-  name                              = "daylight-oac-${random_pet.suffix.id}"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-}
-
-resource "aws_cloudfront_distribution" "cdn" {
-  enabled             = true
-  default_root_object = "index.html"
-
-  origin {
-    domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
-    origin_id                = "s3-frontend"
-    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
+# Local values for common configurations
+locals {
+  # Common naming convention
+  name_prefix = "${var.project_name}-${var.environment}"
+  
+  # Common tags
+  common_tags = {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+    Owner       = var.owner
   }
 
-  default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "s3-frontend"
-    viewer_protocol_policy = "redirect-to-https"
-    compress               = true
+  # API Gateway domain for CloudFront integration
+  api_gateway_domain = replace(module.api.api_endpoint, "https://", "")
+}
 
-    forwarded_values {
-      query_string = false
-      cookies { forward = "none" }
+# Database Module
+module "database" {
+  source = "./modules/database"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  # DynamoDB configuration
+  billing_mode = var.database_config.billing_mode
+  
+  trips_table = var.database_config.trips_table
+  
+  enable_cache_table = var.database_config.enable_cache_table
+  cache_table        = var.database_config.cache_table
+  
+  enable_point_in_time_recovery       = var.database_config.enable_point_in_time_recovery
+  enable_cache_point_in_time_recovery = var.database_config.enable_cache_point_in_time_recovery
+  
+  encryption_configuration = var.database_config.encryption_configuration
+  enable_cloudwatch_alarms = var.database_config.enable_cloudwatch_alarms
+  alarm_sns_topic_arn     = var.alarm_sns_topic_arn
+}
+
+# Lambda + API Gateway Module
+module "api" {
+  source = "./modules/lambda-api"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  # Lambda configuration
+  lambda_runtime    = var.api_config.lambda_runtime
+  lambda_functions  = var.api_config.lambda_functions
+  api_routes       = var.api_config.api_routes
+  
+  # Environment variables for all Lambda functions
+  environment_variables = merge(
+    var.api_config.environment_variables,
+    {
+      TABLE_TRIPS = module.database.trips_table_name
+    },
+    var.database_config.enable_cache_table ? {
+      TABLE_CACHE = module.database.cache_table_name
+    } : {},
+    # Provider configuration
+    {
+      PLACES_PROVIDER             = var.provider_config.default_provider
+      ENABLE_PROVIDER_FAILOVER    = tostring(var.provider_config.enable_failover)
+      PROVIDER_TIMEOUT            = tostring(var.provider_config.timeout_ms)
+      GOOGLE_PLACES_TIMEOUT       = tostring(var.provider_config.google_places.timeout_ms)
+      MOCK_PROVIDER_FAIL_RATE     = tostring(var.provider_config.mock_provider.fail_rate)
+      MOCK_PROVIDER_DELAY         = tostring(var.provider_config.mock_provider.delay_ms)
     }
-  }
+  )
 
-  price_class = "PriceClass_100"
-
-  restrictions {
-    geo_restriction {
-      restriction_type = "none"
-    }
-  }
-
-  viewer_certificate {
-    cloudfront_default_certificate = true
-  }
+  # DynamoDB access
+  dynamodb_table_arn  = module.database.trips_table_arn
+  dynamodb_table_name = module.database.trips_table_name
+  
+  # External API access (for Google Places, etc.)
+  enable_external_api_access = var.api_config.enable_external_api_access
+  
+  # CORS configuration
+  cors_configuration = var.api_config.cors_configuration
+  
+  # API Gateway settings
+  api_stage_name           = var.api_config.api_stage_name
+  api_auto_deploy          = var.api_config.api_auto_deploy
+  throttling_burst_limit   = var.api_config.throttling_burst_limit
+  throttling_rate_limit    = var.api_config.throttling_rate_limit
+  detailed_metrics_enabled = var.api_config.detailed_metrics_enabled
+  
+  log_retention_days = var.log_retention_days
+  
+  # CloudWatch alarms
+  enable_cloudwatch_alarms = var.api_config.enable_cloudwatch_alarms
+  alarm_sns_topic_arn     = var.create_alarm_topic ? aws_sns_topic.alarms[0].arn : var.alarm_sns_topic_arn
+  error_rate_threshold    = var.api_config.error_rate_threshold
 }
 
-resource "aws_s3_bucket_policy" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Sid       = "AllowCloudFrontRead",
-      Effect    = "Allow",
-      Principal = { Service = "cloudfront.amazonaws.com" },
-      Action    = ["s3:GetObject"],
-      Resource  = ["${aws_s3_bucket.frontend.arn}/*"],
-      Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.cdn.arn } }
-    }]
+# Frontend Module
+module "frontend" {
+  source = "./modules/frontend"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  # S3 configuration
+  bucket_name       = var.frontend_config.bucket_name
+  force_destroy     = var.frontend_config.force_destroy
+  enable_versioning = var.frontend_config.enable_versioning
+  
+  encryption_configuration = var.frontend_config.encryption_configuration
+  
+  # CloudFront configuration
+  enable_ipv6          = var.frontend_config.enable_ipv6
+  default_root_object  = var.frontend_config.default_root_object
+  price_class          = var.frontend_config.price_class
+  
+  # API Gateway integration for /api/* routes
+  api_gateway_domain = local.api_gateway_domain
+  
+  # Cache behaviors
+  cache_behaviors = var.frontend_config.cache_behaviors
+  
+  # SSL and security
+  ssl_certificate        = var.frontend_config.ssl_certificate
+  geo_restriction        = var.frontend_config.geo_restriction
+  custom_error_responses = var.frontend_config.custom_error_responses
+  
+  # WAF integration
+  web_acl_id = var.frontend_config.web_acl_id
+  
+  # Logging
+  enable_cloudfront_logs = var.frontend_config.enable_cloudfront_logs
+  log_retention_days     = var.log_retention_days
+}
+
+# Secrets Manager for external API keys (optional)
+resource "aws_secretsmanager_secret" "api_keys" {
+  count = var.create_secrets_manager ? 1 : 0
+
+  name        = "${local.name_prefix}-api-keys"
+  description = "API keys for external services (Google Places, etc.)"
+  
+  tags = local.common_tags
+}
+
+resource "aws_secretsmanager_secret_version" "api_keys" {
+  count = var.create_secrets_manager ? 1 : 0
+
+  secret_id = aws_secretsmanager_secret.api_keys[0].id
+  secret_string = jsonencode({
+    google_places_api_key = var.google_places_api_key
+    mapbox_access_token   = var.mapbox_access_token
   })
 }
 
-# --- DynamoDB (trips) ---
-resource "aws_dynamodb_table" "trips" {
-  name         = "daylight_trips_${random_pet.suffix.id}"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "tripId"
+# CloudWatch Log Group for application logs
+resource "aws_cloudwatch_log_group" "application" {
+  count = var.create_application_log_group ? 1 : 0
 
-  attribute {
-    name = "tripId"
-    type = "S"
-  }
+  name              = "/aws/application/${local.name_prefix}"
+  retention_in_days = var.log_retention_days
+
+  tags = local.common_tags
 }
 
-# --- Lambda IAM role & policy ---
-data "aws_iam_policy_document" "assume_lambda" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-  }
+# SNS Topic for alarms (optional)
+resource "aws_sns_topic" "alarms" {
+  count = var.create_alarm_topic ? 1 : 0
+
+  name = "${local.name_prefix}-alarms"
+  
+  tags = local.common_tags
 }
 
-resource "aws_iam_role" "lambda" {
-  name               = "daylight_lambda_${random_pet.suffix.id}"
-  assume_role_policy = data.aws_iam_policy_document.assume_lambda.json
-}
+resource "aws_sns_topic_subscription" "alarm_email" {
+  count = var.create_alarm_topic && var.alarm_email != null ? 1 : 0
 
-resource "aws_iam_role_policy_attachment" "lambda_basic" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  topic_arn = aws_sns_topic.alarms[0].arn
+  protocol  = "email"
+  endpoint  = var.alarm_email
 }
-
-resource "aws_iam_role_policy" "dynamo_rw" {
-  name = "daylight_dynamo_rw_${random_pet.suffix.id}"
-  role = aws_iam_role.lambda.id
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Effect = "Allow",
-      Action = [
-        "dynamodb:PutItem","dynamodb:GetItem","dynamodb:UpdateItem",
-        "dynamodb:DeleteItem","dynamodb:Query","dynamodb:Scan"
-      ],
-      Resource = aws_dynamodb_table.trips.arn
-    }]
-  })
-}
-
-# Path to built Lambda zips
-variable "backend_zip_dir" {
-  description = "Path to backend/dist with Lambda zip artifacts"
-  type        = string
-  default     = "../../backend/dist"
-}
-
-# --- Lambdas ---
-resource "aws_lambda_function" "trips" {
-  function_name    = "daylight_trips_${random_pet.suffix.id}"
-  role             = aws_iam_role.lambda.arn
-  handler          = "trips.handler"
-  runtime = "nodejs18.x"
-  filename         = "${var.backend_zip_dir}/trips.zip"
-  source_code_hash = filebase64sha256("${var.backend_zip_dir}/trips.zip")
-  environment { variables = { TABLE_TRIPS = aws_dynamodb_table.trips.name } }
-}
-
-resource "aws_lambda_function" "plan" {
-  function_name    = "daylight_plan_${random_pet.suffix.id}"
-  role             = aws_iam_role.lambda.arn
-  handler          = "plan.handler"
-  runtime = "nodejs18.x"
-  filename         = "${var.backend_zip_dir}/plan.zip"
-  source_code_hash = filebase64sha256("${var.backend_zip_dir}/plan.zip")
-  environment { variables = { TABLE_TRIPS = aws_dynamodb_table.trips.name } }
-}
-
-# --- API Gateway (HTTP API) ---
-resource "aws_apigatewayv2_api" "api" {
-  name          = "daylight_api_${random_pet.suffix.id}"
-  protocol_type = "HTTP"
-  cors_configuration {
-    allow_headers = ["*"]
-    allow_methods = ["GET","POST","OPTIONS"]
-    allow_origins = ["*"]
-  }
-}
-
-resource "aws_apigatewayv2_integration" "plan" {
-  api_id                 = aws_apigatewayv2_api.api.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.plan.invoke_arn
-  integration_method     = "POST"
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_route" "get_plan" {
-  api_id    = aws_apigatewayv2_api.api.id
-  route_key = "GET /plan"
-  target    = "integrations/${aws_apigatewayv2_integration.plan.id}"
-}
-
-resource "aws_lambda_permission" "allow_apigw_plan" {
-  statement_id  = "AllowAPIGatewayInvokePlan"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.plan.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*/plan"
-}
-
-resource "aws_apigatewayv2_integration" "trips" {
-  api_id                 = aws_apigatewayv2_api.api.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.trips.invoke_arn
-  integration_method     = "POST"
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_route" "post_trips" {
-  api_id    = aws_apigatewayv2_api.api.id
-  route_key = "POST /trips"
-  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
-}
-
-resource "aws_lambda_permission" "allow_apigw_trips" {
-  statement_id  = "AllowAPIGatewayInvokeTrips"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.trips.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*/trips"
-}
-
-resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.api.id
-  name        = "$default"
-  auto_deploy = true
-}
-
-# --- Outputs ---
-output "frontend_bucket" { value = aws_s3_bucket.frontend.bucket }
-output "cdn_domain"      { value = aws_cloudfront_distribution.cdn.domain_name }
-output "api_base_url"    { value = aws_apigatewayv2_api.api.api_endpoint }

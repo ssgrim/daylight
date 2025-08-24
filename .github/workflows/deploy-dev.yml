@@ -1,0 +1,238 @@
+name: Deploy to Dev
+
+on:
+  push:
+    branches: [ dev ]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - 'infra/**'
+      - '.github/workflows/deploy-dev.yml'
+
+env:
+  AWS_REGION: us-west-1
+  NODE_VERSION: 18
+  ENVIRONMENT: dev
+
+jobs:
+  deploy:
+    name: Deploy Backend and Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: |
+          frontend/package-lock.json
+          backend/package-lock.json
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Install backend dependencies
+      working-directory: ./backend
+      run: npm ci
+      
+    - name: Build and package Lambda functions
+      working-directory: ./backend
+      run: |
+        npm run build
+        echo "✅ Lambda functions built and zipped"
+        ls -la dist/
+        
+    - name: Deploy Lambda functions
+      working-directory: ./backend
+      run: |
+        # Update trips Lambda function
+        echo "📦 Updating trips Lambda function..."
+        aws lambda update-function-code \
+          --function-name "daylight-trips-${{ env.ENVIRONMENT }}" \
+          --zip-file fileb://dist/trips.zip \
+          --publish
+          
+        # Update plan Lambda function  
+        echo "📦 Updating plan Lambda function..."
+        aws lambda update-function-code \
+          --function-name "daylight-plan-${{ env.ENVIRONMENT }}" \
+          --zip-file fileb://dist/plan.zip \
+          --publish
+          
+        echo "✅ Lambda functions updated successfully"
+        
+    - name: Wait for Lambda deployment
+      run: |
+        echo "⏳ Waiting for Lambda functions to be ready..."
+        aws lambda wait function-updated \
+          --function-name "daylight-trips-${{ env.ENVIRONMENT }}"
+        aws lambda wait function-updated \
+          --function-name "daylight-plan-${{ env.ENVIRONMENT }}"
+        echo "✅ Lambda functions are ready"
+        
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+      
+    - name: Build frontend
+      working-directory: ./frontend
+      run: |
+        npm run build
+        echo "✅ Frontend built successfully"
+        ls -la dist/
+      env:
+        # Build-time environment variables
+        VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+        
+    - name: Create runtime configuration
+      working-directory: ./frontend
+      run: |
+        # Create env.json with runtime configuration
+        cat > dist/env.json << EOF
+        {
+          "VITE_API_BASE": "${{ secrets.DEV_API_BASE_URL }}",
+          "ENVIRONMENT": "${{ env.ENVIRONMENT }}",
+          "BUILD_TIME": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "VERSION": "${{ github.sha }}",
+          "COMMIT_SHORT": "${GITHUB_SHA:0:7}",
+          "BRANCH": "${{ github.ref_name }}"
+        }
+        EOF
+        
+        echo "📝 Runtime configuration created:"
+        cat dist/env.json
+        
+    - name: Deploy frontend to S3
+      working-directory: ./frontend
+      run: |
+        S3_BUCKET="${{ secrets.DEV_S3_BUCKET_NAME }}"
+        
+        echo "☁️ Uploading to S3 bucket: $S3_BUCKET"
+        
+        # Upload static assets with long-term caching
+        echo "📂 Uploading static assets (1-year cache)..."
+        aws s3 sync dist/assets/ s3://$S3_BUCKET/assets/ \
+          --cache-control "public, max-age=31536000, immutable" \
+          --delete \
+          --exclude "*" \
+          --include "*.js" \
+          --include "*.css" \
+          --include "*.png" \
+          --include "*.jpg" \
+          --include "*.jpeg" \
+          --include "*.gif" \
+          --include "*.svg" \
+          --include "*.woff" \
+          --include "*.woff2"
+        
+        # Upload HTML with short-term caching
+        echo "📄 Uploading index.html (5-minute cache)..."
+        aws s3 cp dist/index.html s3://$S3_BUCKET/ \
+          --cache-control "public, max-age=300, must-revalidate"
+        
+        # Upload env.json with no caching
+        echo "⚙️ Uploading runtime config (no cache)..."
+        aws s3 cp dist/env.json s3://$S3_BUCKET/ \
+          --cache-control "no-cache, no-store, must-revalidate"
+        
+        # Upload other files with medium caching
+        echo "📋 Uploading other files (1-hour cache)..."
+        aws s3 sync dist/ s3://$S3_BUCKET/ \
+          --cache-control "public, max-age=3600" \
+          --exclude "assets/*" \
+          --exclude "index.html" \
+          --exclude "env.json"
+        
+        echo "✅ Frontend uploaded to S3 successfully"
+        
+    - name: Invalidate CloudFront cache
+      run: |
+        DISTRIBUTION_ID="${{ secrets.DEV_CLOUDFRONT_DISTRIBUTION_ID }}"
+        
+        echo "🔄 Creating CloudFront invalidation..."
+        INVALIDATION_ID=$(aws cloudfront create-invalidation \
+          --distribution-id $DISTRIBUTION_ID \
+          --paths "/index.html" "/env.json" "/*" \
+          --query 'Invalidation.Id' \
+          --output text)
+        
+        echo "📋 Invalidation created: $INVALIDATION_ID"
+        echo "🕒 Status: In Progress"
+        
+        # Wait for invalidation to complete
+        echo "⏳ Waiting for cache invalidation to complete..."
+        aws cloudfront wait invalidation-completed \
+          --distribution-id $DISTRIBUTION_ID \
+          --id $INVALIDATION_ID
+        
+        echo "✅ Cache invalidation completed successfully"
+        
+    - name: Deployment summary
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo ""
+        echo "📊 Deployment Summary:"
+        echo "  Environment: ${{ env.ENVIRONMENT }}"
+        echo "  Commit: ${{ github.sha }}"
+        echo "  Branch: ${{ github.ref_name }}"
+        echo "  Build Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo ""
+        echo "🚀 Deployed Components:"
+        echo "  ✅ Lambda functions (trips, plan)"
+        echo "  ✅ Frontend assets (S3)"
+        echo "  ✅ CloudFront cache invalidated"
+        echo ""
+        echo "🔗 Application URL:"
+        echo "  https://${{ secrets.DEV_DOMAIN_NAME }}"
+        
+    - name: Run smoke tests
+      run: |
+        # Wait a moment for deployment to propagate
+        echo "⏳ Waiting for deployment to propagate..."
+        sleep 30
+        
+        # Test API endpoint
+        API_URL="${{ secrets.DEV_API_BASE_URL }}"
+        echo "🧪 Testing API endpoint: $API_URL"
+        
+        response=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health" || echo "000")
+        if [ "$response" = "200" ]; then
+          echo "✅ API health check passed"
+        else
+          echo "❌ API health check failed (HTTP $response)"
+          exit 1
+        fi
+        
+        # Test frontend
+        FRONTEND_URL="https://${{ secrets.DEV_DOMAIN_NAME }}"
+        echo "🧪 Testing frontend: $FRONTEND_URL"
+        
+        response=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL" || echo "000")
+        if [ "$response" = "200" ]; then
+          echo "✅ Frontend health check passed"
+        else
+          echo "❌ Frontend health check failed (HTTP $response)"
+          exit 1
+        fi
+        
+        echo "🎉 All smoke tests passed!"
+        
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "✅ Deployment successful!"
+          echo "🔗 Dev environment: https://${{ secrets.DEV_DOMAIN_NAME }}"
+        else
+          echo "❌ Deployment failed!"
+          echo "Check the workflow logs for details."
+        fi
