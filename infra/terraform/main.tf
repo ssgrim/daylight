@@ -1,7 +1,7 @@
 terraform {
   required_version = ">= 1.6.0"
   required_providers {
-    aws    = { source = "hashicorp/aws",    version = "~> 5.0" }
+    aws    = { source = "hashicorp/aws", version = "~> 4.67",    version = "~> 4.67" }
     random = { source = "hashicorp/random", version = "~> 3.6" }
   }
 }
@@ -148,7 +148,7 @@ resource "aws_lambda_function" "trips" {
   function_name    = "daylight_trips_${random_pet.suffix.id}"
   role             = aws_iam_role.lambda.arn
   handler          = "trips.handler"
-  runtime          = "nodejs20.x"
+  runtime = "nodejs18.x"
   filename         = "${var.backend_zip_dir}/trips.zip"
   source_code_hash = filebase64sha256("${var.backend_zip_dir}/trips.zip")
   environment { variables = { TABLE_TRIPS = aws_dynamodb_table.trips.name } }
@@ -158,7 +158,7 @@ resource "aws_lambda_function" "plan" {
   function_name    = "daylight_plan_${random_pet.suffix.id}"
   role             = aws_iam_role.lambda.arn
   handler          = "plan.handler"
-  runtime          = "nodejs20.x"
+  runtime = "nodejs18.x"
   filename         = "${var.backend_zip_dir}/plan.zip"
   source_code_hash = filebase64sha256("${var.backend_zip_dir}/plan.zip")
   environment { variables = { TABLE_TRIPS = aws_dynamodb_table.trips.name } }
