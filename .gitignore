@@ -4,3 +4,7 @@ infra/.terraform/
 infra/**/.terraform/
 node_modules/
 dist/
+.terraform/
+infra/.terraform/
+infra/**/.terraform/
+infra/terraform/**/.terraform/
