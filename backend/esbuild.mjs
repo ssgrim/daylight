@@ -10,7 +10,8 @@ await build({
     'src/handlers/trips.ts', 
     'src/handlers/plan.ts', 
     'src/handlers/health.ts',
-    'src/handlers/rateLimit.ts'
+    'src/handlers/rateLimit.ts',
+    'src/handlers/places.ts'
   ],
   outdir: 'dist',
   bundle: true,
@@ -18,7 +19,7 @@ await build({
   target: 'node20',
   format: 'cjs',
   minify: false,  // Disable minification for debugging
-  external: ['aws-sdk', '@aws-sdk/*']
+  external: ['aws-sdk', '@aws-sdk/*', '@sentry/node', '@sentry/*']
 })
 
 function zipFile(srcFile, destZip) {
@@ -43,4 +44,5 @@ zipFile('dist/trips.js', 'dist/trips.zip')
 zipFile('dist/plan.js', 'dist/plan.zip')
 zipFile('dist/health.js', 'dist/health.zip')
 zipFile('dist/rateLimit.js', 'dist/rateLimit.zip')
+zipFile('dist/places.js', 'dist/places.zip')
 console.log('Built Lambda zips')

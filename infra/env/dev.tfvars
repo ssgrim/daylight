@@ -105,9 +105,15 @@ api_config = {
   
   cors_configuration = {
     allow_credentials = false
-    allow_headers     = ["*"]
+    allow_headers     = ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "X-API-Key"]
     allow_methods     = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    allow_origins     = ["*"]  # Permissive in dev
+    allow_origins     = [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://127.0.0.1:3000", 
+      "http://127.0.0.1:5173",
+      "https://kda4nly79c.execute-api.us-west-1.amazonaws.com" # Current API Gateway domain
+    ]
     max_age          = 86400
   }
   

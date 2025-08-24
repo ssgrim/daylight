@@ -12,10 +12,10 @@ import {
   HealthCheckResult
 } from '../providers/interfaces.js';
 import { providerFactory } from '../providers/factory.js';
-import { PlacesResponse } from '../types/api-schemas.js';
+import { PlacesResponse, PlaceCategory } from '../types/api-schemas.js';
 
 // Import existing cache utilities
-const { getCached, setCached, getCacheControlHeader } = require('./lib/cache-layer.cjs');
+const { getCached, setCached, getCacheControlHeader } = require('./cache-layer.cjs');
 
 /**
  * Configuration for the places service
@@ -76,8 +76,11 @@ export class PlacesService {
 
     // Search using provider with failover
     let searchResponse: SearchResponse;
+    const startTime = Date.now();
+    let selectedProvider: any;
+    
     try {
-      const provider = await providerFactory.getProviderWithFailover(this.config.preferredProvider);
+      selectedProvider = await providerFactory.getProviderWithFailover(this.config.preferredProvider);
       
       // Apply service-level limits
       const searchParams = {
@@ -85,7 +88,7 @@ export class PlacesService {
         limit: Math.min(params.limit || this.config.maxResults, this.config.maxResults)
       };
 
-      searchResponse = await provider.searchPlaces(searchParams);
+      searchResponse = await selectedProvider.searchPlaces(searchParams);
       console.log(`[PlacesService] Search completed using provider: ${searchResponse.metadata.provider}`);
       
     } catch (error) {
@@ -110,8 +113,23 @@ export class PlacesService {
     // Transform to API schema format
     const responseData: PlacesResponse = {
       query: params.query,
-      count: searchResponse.results.length,
-      results: searchResponse.results
+      results: searchResponse.results,
+      pagination: {
+        page: Math.floor((params.offset || 0) / (params.limit || 20)) + 1,
+        pageSize: params.limit || 20,
+        totalResults: searchResponse.results.length,
+        totalPages: Math.ceil(searchResponse.results.length / (params.limit || 20)),
+        hasNextPage: false, // Simple implementation
+        hasPreviousPage: (params.offset || 0) > 0
+      },
+      sort: params.sort,
+      category: params.category as PlaceCategory | undefined,
+      location: params.location,
+      metadata: {
+        provider: selectedProvider.getName(),
+        duration: Date.now() - startTime,
+        cached: false
+      }
     };
 
     // Cache the result

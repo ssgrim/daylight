@@ -1,5 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
 import { initSentry, withSentry } from '../lib/sentry.js'
+import { addCorsHeaders } from '../lib/cors.js'
 
 // Initialize Sentry (will only initialize if DSN is configured)
 initSentry()
@@ -9,17 +10,16 @@ initSentry()
  * This endpoint is intentionally exempt from Places API calls and external dependencies
  * to provide a reliable liveness check.
  */
-const healthHandler: APIGatewayProxyHandlerV2 = async () => {
+const healthHandler: APIGatewayProxyHandlerV2 = async (event) => {
   const timestamp = new Date().toISOString()
+  const origin = event.headers?.origin || event.headers?.Origin
   
   return {
     statusCode: 200,
-    headers: {
+    headers: addCorsHeaders({
       'content-type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,OPTIONS',
       'Cache-Control': 'no-cache, no-store, must-revalidate'
-    },
+    }, origin),
     body: JSON.stringify({
       ok: true,
       ts: timestamp

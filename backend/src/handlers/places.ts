@@ -9,6 +9,7 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { initializeProvidersFromEnv } from '../providers/factory.js';
 import { createPlacesServiceFromEnv } from '../lib/places-service.js';
 import { ProviderError } from '../providers/interfaces.js';
+import { addCorsHeaders, handlePreflightRequest } from '../lib/cors.js';
 
 // Import validation utilities
 const { validateQuery, validateWith } = require('../lib/validation.cjs');
@@ -48,17 +49,11 @@ const placesHandler: APIGatewayProxyHandlerV2 = async (event) => {
     // Initialize on first request (cold start)
     await ensureInitialized();
 
+    const origin = event.headers?.origin || event.headers?.Origin;
+
     // Handle OPTIONS request for CORS
     if (event.requestContext.http.method === 'OPTIONS') {
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET,OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-          'Access-Control-Max-Age': '86400'
-        }
-      };
+      return handlePreflightRequest(event);
     }
 
     // Validate query parameter
@@ -66,7 +61,11 @@ const placesHandler: APIGatewayProxyHandlerV2 = async (event) => {
     const validation = validateWith(() => validateQuery(queryParam));
     
     if (!validation.success) {
-      return validation.response;
+      // Add CORS headers to validation error response
+      return {
+        ...validation.response,
+        headers: addCorsHeaders(validation.response.headers, origin)
+      };
     }
 
     const query = validation.data;
@@ -91,12 +90,10 @@ const placesHandler: APIGatewayProxyHandlerV2 = async (event) => {
     // Return response with appropriate headers
     return {
       statusCode: 200,
-      headers: {
+      headers: addCorsHeaders({
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET,OPTIONS',
         ...result.headers
-      },
+      }, origin),
       body: JSON.stringify(result.data)
     };
 
@@ -107,13 +104,11 @@ const placesHandler: APIGatewayProxyHandlerV2 = async (event) => {
     if (error instanceof ProviderError) {
       return {
         statusCode: error.statusCode,
-        headers: {
+        headers: addCorsHeaders({
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET,OPTIONS',
           'X-Provider-Error': error.provider,
           'X-Error-Type': error.type
-        },
+        }, origin),
         body: JSON.stringify({
           error: error.message,
           type: error.type,
@@ -126,11 +121,9 @@ const placesHandler: APIGatewayProxyHandlerV2 = async (event) => {
     // Handle other errors
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET,OPTIONS'
-      },
+      headers: addCorsHeaders({
+        'Content-Type': 'application/json'
+      }, origin),
       body: JSON.stringify({
         error: 'Internal server error',
         type: 'internal_error'
@@ -146,23 +139,23 @@ export const healthHandler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     await ensureInitialized();
     
+    const origin = event.headers?.origin || event.headers?.Origin;
     const healthStatus = await placesService!.getHealthStatus();
     
     return {
       statusCode: healthStatus.healthy ? 200 : 503,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
+      headers: addCorsHeaders({
+        'Content-Type': 'application/json'
+      }, origin),
       body: JSON.stringify(healthStatus)
     };
   } catch (error) {
+    const origin = event.headers?.origin || event.headers?.Origin;
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
+      headers: addCorsHeaders({
+        'Content-Type': 'application/json'
+      }, origin),
       body: JSON.stringify({
         healthy: false,
         error: error instanceof Error ? error.message : 'Unknown error'

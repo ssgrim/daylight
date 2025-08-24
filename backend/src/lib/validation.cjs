@@ -68,9 +68,8 @@ function createValidationErrorResponse(error) {
   return {
     statusCode: 400,
     headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,OPTIONS,POST'
+      'Content-Type': 'application/json'
+      // CORS headers will be added by the handler using the CORS utility
     },
     body: JSON.stringify({
       error: 'Validation failed',

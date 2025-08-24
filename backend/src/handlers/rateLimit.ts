@@ -1,5 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
 import { initSentry, withSentry, captureMessage } from '../lib/sentry.js'
+import { addCorsHeaders } from '../lib/cors.js'
 
 // Initialize Sentry
 initSentry()
@@ -8,6 +9,7 @@ const rateLimitHandler: APIGatewayProxyHandlerV2 = async (event) => {
   const timestamp = new Date().toISOString()
   const ip = event.requestContext.http.sourceIp
   const userAgent = event.headers['user-agent'] || 'unknown'
+  const origin = event.headers?.origin || event.headers?.Origin
   
   // Log rate limit hit for monitoring
   captureMessage('Rate limit exceeded', 'warning', {
@@ -20,15 +22,13 @@ const rateLimitHandler: APIGatewayProxyHandlerV2 = async (event) => {
   
   return {
     statusCode: 429,
-    headers: {
+    headers: addCorsHeaders({
       'content-type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Retry-After': '300', // Suggest retry after 5 minutes
       'X-RateLimit-Limit': '2000',
       'X-RateLimit-Window': '300'
-    },
+    }, origin),
     body: JSON.stringify({
       error: 'Rate limit exceeded',
       message: 'Too many requests. Please try again later.',

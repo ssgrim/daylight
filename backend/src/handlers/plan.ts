@@ -1,5 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
 import { initSentry, withSentry, captureError, captureMessage } from '../lib/sentry.js'
+import { addCorsHeaders } from '../lib/cors.js'
 
 // Import caching and validation utilities (ensure these are compiled to JS)
 const { getCached, setCached, getCacheControlHeader } = require('../lib/cache-layer.cjs');
@@ -10,6 +11,7 @@ initSentry()
 
 const planHandler: APIGatewayProxyHandlerV2 = async (event: any) => {
   const now = new Date().toISOString()
+  const origin = event.headers?.origin || event.headers?.Origin
   
   try {
     // Extract and validate query parameters
@@ -29,7 +31,11 @@ const planHandler: APIGatewayProxyHandlerV2 = async (event: any) => {
           lng: lngParam,
           validation_error: validation.response
         })
-        return validation.response;
+        // Add CORS headers to validation error response
+        return {
+          ...validation.response,
+          headers: addCorsHeaders(validation.response.headers, origin)
+        };
       }
       
       coordinates = validation.data;
@@ -58,13 +64,11 @@ const planHandler: APIGatewayProxyHandlerV2 = async (event: any) => {
       console.log(`Returning cached plan result for: ${cacheKey}`);
       return {
         statusCode: 200,
-        headers: { 
+        headers: addCorsHeaders({ 
           'content-type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET,OPTIONS',
           'Cache-Control': getCacheControlHeader(CACHE_TTL, false),
           'X-Cache': 'HIT'
-        },
+        }, origin),
         body: JSON.stringify(cached)
       };
     }
@@ -90,13 +94,11 @@ const planHandler: APIGatewayProxyHandlerV2 = async (event: any) => {
 
     return {
       statusCode: 200,
-      headers: { 
+      headers: addCorsHeaders({ 
         'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET,OPTIONS',
         'Cache-Control': getCacheControlHeader(CACHE_TTL, false),
         'X-Cache': 'MISS'
-      },
+      }, origin),
       body: JSON.stringify(result)
     };
   } catch (err) {
@@ -113,11 +115,9 @@ const planHandler: APIGatewayProxyHandlerV2 = async (event: any) => {
     
     return {
       statusCode: 500,
-      headers: { 
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET,OPTIONS'
-      },
+      headers: addCorsHeaders({ 
+        'content-type': 'application/json'
+      }, origin),
       body: JSON.stringify({ 
         error: 'Internal server error',
         type: 'internal_error'

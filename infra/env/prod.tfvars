@@ -130,9 +130,15 @@ api_config = {
   
   cors_configuration = {
     allow_credentials = false
-    allow_headers     = ["Content-Type", "Authorization", "X-Requested-With"]
+    allow_headers     = ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "X-API-Key"]
     allow_methods     = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    allow_origins     = ["https://daylight.app", "https://www.daylight.app"]  # Restrictive in prod
+    allow_origins     = [
+      "https://daylight.app", 
+      "https://www.daylight.app",
+      "https://staging.daylight.app",
+      # Add CloudFront distribution domain when available
+      # "https://d1234567890abc.cloudfront.net"
+    ]
     max_age          = 86400
   }
   
