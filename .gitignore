@@ -10,3 +10,7 @@ infra/**/.terraform/
 infra/terraform/**/.terraform/
 **/.terraform/
 infra/terraform/.terraform/
+**/.terraform/
+node_modules/
+dist/
+.DS_Store
