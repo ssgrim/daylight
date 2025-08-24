@@ -1,0 +1,28 @@
+{
+  "CallerReference": "daylight-dev-1756011224",
+  "Comment": "Daylight DEV",
+  "Enabled": true,
+  "IsIPV6Enabled": true,
+  "DefaultRootObject": "index.html",
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "s3-dev-origin",
+        "DomainName": "daylight-frontend-us-west-1-tolerant-bug.s3.amazonaws.com",
+        "S3OriginConfig": { "OriginAccessIdentity": "" }
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "s3-dev-origin",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 2,
+      "Items": ["GET","HEAD"]
+    },
+    "Compress": true,
+    "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  },
+  "PriceClass": "PriceClass_100"
+}
