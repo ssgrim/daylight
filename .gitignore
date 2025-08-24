@@ -8,3 +8,5 @@ dist/
 infra/.terraform/
 infra/**/.terraform/
 infra/terraform/**/.terraform/
+**/.terraform/
+infra/terraform/.terraform/
