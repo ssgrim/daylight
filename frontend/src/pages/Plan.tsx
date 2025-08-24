@@ -1,8 +1,144 @@
+import { useEffect, useState } from 'react'
+
+type Suggestion = {
+  id: string
+  title: string
+  start: string
+  end: string
+  score: number
+  reason?: string
+  season?: { season: string; hemisphere: string }
+  events?: { provider: string; events: Array<{ name: string; venue?: string; date?: string }> }
+  traffic?: { provider: string; congestion?: number }
+}
+
 export default function Plan() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [latInput, setLatInput] = useState('47.6062')
+  const [lngInput, setLngInput] = useState('-122.3321')
+  const [showEvents, setShowEvents] = useState(true)
+  const [showTraffic, setShowTraffic] = useState(true)
+
+  useEffect(() => {
+  const base = (import.meta as any).env?.VITE_API_BASE || ''
+    const url = `${base}/plan`
+    let mounted = true
+    fetch(url)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`status ${res.status}`)
+        return res.json()
+      })
+      .then((data) => {
+        if (!mounted) return
+        if (Array.isArray(data)) setSuggestions(data)
+        else setError('unexpected response shape')
+      })
+      .catch((err) => {
+        // fallback demo so the page shows something without a backend running
+        setError(String(err.message ?? err))
+        setSuggestions([
+          { id: 'demo-1', title: 'Demo Stop', start: new Date().toISOString(), end: new Date().toISOString(), score: 90, reason: `fallback: ${String(err.message ?? err)}` }
+        ])
+      })
+      .finally(() => mounted && setLoading(false))
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  async function fetchWithCoords(lat: number, lng: number) {
+    setLoading(true)
+    setError(null)
+  const base = (import.meta as any).env?.VITE_API_BASE || ''
+    const url = `${base}/plan?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`status ${res.status}`)
+      const data = await res.json()
+      if (Array.isArray(data)) setSuggestions(data)
+      else setError('unexpected response shape')
+    } catch (err: any) {
+      setError(String(err.message ?? err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="p-6">
       <h2 className="text-xl font-semibold">Planner</h2>
-      <p className="text-slate-600">Suggestions will appear here.</p>
+      <div className="mt-3 flex gap-2 items-center">
+        <label className="text-sm">Lat</label>
+        <input className="border px-2 py-1 rounded" value={latInput} onChange={(e) => setLatInput(e.target.value)} />
+        <label className="text-sm">Lng</label>
+        <input className="border px-2 py-1 rounded" value={lngInput} onChange={(e) => setLngInput(e.target.value)} />
+        <button className="px-3 py-1 bg-sky-600 text-white rounded" onClick={() => fetchWithCoords(Number(latInput), Number(lngInput))}>Fetch</button>
+        <button className="ml-2 px-3 py-1 border rounded" onClick={() => { setLatInput('47.6062'); setLngInput('-122.3321') }}>Seattle</button>
+        <button className="ml-2 px-3 py-1 border rounded" onClick={() => { setLatInput('37.7749'); setLngInput('-122.4194') }}>San Francisco</button>
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showEvents} onChange={(e) => setShowEvents(e.target.checked)} /> Show events</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showTraffic} onChange={(e) => setShowTraffic(e.target.checked)} /> Show traffic</label>
+      </div>
+
+      {loading ? (
+        <p className="text-slate-600">Loading suggestions…</p>
+      ) : error ? (
+        <div>
+          <p className="text-yellow-600">Unable to load live suggestions ({error}) — showing demo results.</p>
+          <ul className="mt-4 space-y-3">
+            {suggestions.map((s) => (
+              <li key={s.id} className="p-3 border rounded">
+                <div className="font-medium">{s.title} <span className="text-sm text-slate-500">({s.score})</span></div>
+                <div className="text-sm text-slate-600">{s.start} → {s.end}</div>
+                {s.reason && <div className="text-sm text-slate-500 mt-1">{s.reason}</div>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {suggestions.map((s) => (
+            <li key={s.id} className="p-3 border rounded">
+              <div className="flex items-center justify-between">
+                <div className="font-medium">{s.title} <span className="text-sm text-slate-500">({s.score})</span></div>
+                {s.season && (
+                  <div className={`px-2 py-0.5 rounded text-xs ${s.season.season === 'summer' ? 'bg-yellow-200 text-yellow-800' : s.season.season === 'winter' ? 'bg-sky-200 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>{s.season.season}</div>
+                )}
+              </div>
+              <div className="text-sm text-slate-600">{s.start} → {s.end}</div>
+              {s.reason && <div className="text-sm text-slate-500 mt-1">{s.reason}</div>}
+              {s.season && (
+                <div className="text-xs text-slate-400 mt-1">Season: {s.season.season} ({s.season.hemisphere})</div>
+              )}
+              {showEvents && s.events && s.events.events && (
+                <div className="mt-2 text-sm">
+                  <div className="font-semibold">Nearby events</div>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {s.events.events.map((e:any, idx:number) => (
+                      <div key={e.id || idx} className="flex gap-2 p-2 border rounded">
+                        {e.image ? <img src={e.image} alt={e.name} className="w-16 h-12 object-cover rounded" /> : <div className="w-16 h-12 bg-slate-100 rounded" />}
+                        <div>
+                          <div className="font-medium">{e.name}</div>
+                          <div className="text-xs text-slate-500">{e.venue} {e.date ? `· ${new Date(e.date).toLocaleString()}` : ''}</div>
+                          {e.url && <a className="text-xs text-sky-600" href={e.url} target="_blank" rel="noreferrer">Tickets</a>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {showTraffic && s.traffic && s.traffic.congestion != null && (
+                <div className="mt-2 text-sm">Traffic congestion: <span className="font-semibold">{s.traffic.congestion}%</span></div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

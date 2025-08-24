@@ -24,6 +24,43 @@ What's left (short):
 - Frontend: implement planner UI, map integration, and API wiring (auth, token management) in the SPA.
 - Infra: finish Terraform wiring for Lambdas, API Gateway, DynamoDB, and CI secrets; add RBAC/Cognito for production.
 
+Local dev (frontend + backend)
+
+1. Start the backend dev shim (serves `/plan`):
+
+```bash
+cd backend
+node ./dev-server.mjs
+```
+
+2. Start the frontend (Vite) — `VITE_API_BASE` is stored in `frontend/.env.local` and points to the backend dev server by default:
+
+```bash
+cd frontend
+npm ci
+npm run dev -- --port 5173
+```
+
+Open the forwarded Codespaces preview for port 5173. The Plan page has sample buttons that call `/plan?lat=...&lng=...` and show enriched results.
+
+Config & observability notes
+
+- To switch providers set environment variables for the backend (dev or deployed):
+  - `GEOCODE_PROVIDER` (default: `nominatim`) — other options: `mapbox` (requires `MAPBOX_TOKEN`)
+  - `WEATHER_PROVIDER` (default: `open-meteo`) — other options: `openweathermap` (requires `OPENWEATHERMAP_KEY`)
+- The dev adapters use an in-memory LRU cache for reverse geocoding to reduce quota usage.
+- The dev shim appends a small audit log to `backend/external_history.log` for calls to external providers (dev-only). For production, wire logs to CloudWatch/Datadog.
+
+External integrations:
+
+- The backend includes lightweight adapters for public external data sources in `backend/src/lib/external.ts` (Open‑Meteo for weather and Nominatim for reverse geocoding). These are used by the `/plan` handler when `lat` and `lng` query parameters are provided. Example:
+
+```text
+GET /plan?lat=47.6&lng=-122.33
+```text
+
+- These public endpoints do not require API keys but have rate limits; you can replace them with API-key-backed providers (Mapbox, OpenWeatherMap) for production. If you do, document required env vars and secrets in `infra` and CI.
+
 ---
 
 ## 7) CI/CD (GitHub Actions)
@@ -93,7 +130,7 @@ jobs:
       - name: Invalidate CDN
         if: ${{ secrets.CLOUDFRONT_DIST_ID != '' }}
         run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} --paths "/*"
-```
+```text
 
 > Secrets gating ensures PRs run CI, and main deploys only if AWS secrets exist.
 
