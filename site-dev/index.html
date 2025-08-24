@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Daylight — app is running</title>
+  <style>
+    body { font: 16px/1.4 system-ui, sans-serif; margin: 2rem; }
+    .badge { position: fixed; top: 12px; right: 12px; color: #fff; padding: 6px 10px; border-radius: 999px; font-size: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+    .prod { background: #16a34a; } .dev { background: #d97706; }
+    button { padding: .5rem .8rem; border: 1px solid #999; border-radius: 8px; cursor: pointer; background:#fff }
+    pre { background:#f6f6f6; padding:12px; border-radius:8px; overflow:auto }
+  </style>
+</head>
+<body>
+  <h1>Daylight — app is running.</h1>
+  <p id="envline">Environment: <em>loading…</em></p>
+  <button id="ping">Ping API (/plan)</button>
+  <pre id="out" hidden></pre>
+
+  <script>
+    const badge = document.createElement('div'); badge.className='badge dev'; badge.textContent='DEV';
+    document.body.appendChild(badge);
+
+    async function loadEnv() {
+      try {
+        const r = await fetch('/env.json', {cache:'no-store'});
+        const env = await r.json();
+        const envName = (env.envName||'UNKNOWN').toUpperCase();
+        document.getElementById('envline').innerHTML = `Environment: <strong>${envName}</strong> · API: <code>${env.apiBase||''}</code>`;
+        badge.textContent = envName;
+        badge.className = 'badge ' + (envName==='PROD' ? 'prod' : 'dev');
+        return env;
+      } catch (e) {
+        document.getElementById('envline').textContent = 'Environment: LOCAL';
+        return { envName: 'LOCAL', apiBase: '' };
+      }
+    }
+
+    async function ping(env) {
+      const out = document.getElementById('out'); out.hidden=false;
+      if (!env.apiBase) { out.textContent='No apiBase set in env.json'; return; }
+      try {
+        // Try GET first; if 404, fall back to POST
+        const getUrl = env.apiBase.replace(/\/$/, '') + '/plan';
+        let r = await fetch(getUrl);
+        if (r.status === 404) {
+          r = await fetch(getUrl, { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ping:'hello'}) });
+        }
+        const text = await r.text();
+        out.textContent = `Status: ${r.status}\n\n${text}`;
+      } catch (e) {
+        out.textContent = 'Error: ' + (e && e.message || e);
+      }
+    }
+
+    (async () => {
+      const env = await loadEnv();
+      document.getElementById('ping').addEventListener('click', () => ping(env));
+    })();
+  </script>
+</body>
+</html>
