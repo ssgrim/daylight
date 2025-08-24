@@ -1,0 +1,6 @@
+.terraform/
+**/.terraform/
+infra/.terraform/
+infra/**/.terraform/
+node_modules/
+dist/
