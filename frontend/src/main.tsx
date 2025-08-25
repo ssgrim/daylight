@@ -4,10 +4,12 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './styles/index.css'
 import Root from './pages/Root'
 import Plan from './pages/Plan'
+import Profile from './pages/Profile'
 
 const router = createBrowserRouter([
   { path: '/', element: <Root /> },
   { path: '/plan', element: <Plan /> },
+  { path: '/profile', element: <Profile /> },
 ])
 
 

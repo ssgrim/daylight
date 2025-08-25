@@ -6,12 +6,12 @@ import path from 'node:path'
 mkdirSync('dist', { recursive: true })
 
 await build({
-  entryPoints: ['src/handlers/trips.ts', 'src/handlers/plan.ts'],
+  entryPoints: ['src/handlers/trips.ts', 'src/handlers/plan.ts', 'src/handlers/profile.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'node',
   target: 'node20',
-  format: 'cjs',
+  format: 'esm',
   minify: true
 })
 

@@ -8,6 +8,15 @@ import { getSeasonFor } from './src/lib/season.mjs'
 
 const PORT = process.env.PORT || 5174
 
+// Helper function to read request body
+async function getRequestBody(req) {
+  let body = ''
+  for await (const chunk of req) {
+    body += chunk
+  }
+  return body
+}
+
 let historyDb = null
 // attempt to init DB for history; non-fatal
 initDb().then(db => { historyDb = db; console.log('history DB initialized') }).catch(err => { console.warn('history DB init failed', String(err)) })
@@ -76,6 +85,7 @@ const server = http.createServer(async (req, res) => {
         const lng = query.lng ? Number(query.lng) : NaN
         if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
           try {
+          /*...*/
             // call Open-Meteo and Nominatim directly
             const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&current_weather=true&timezone=UTC`)
             const weather = weatherRes.ok ? await weatherRes.json() : null
@@ -221,6 +231,36 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         res.writeHead(500, defaultCors)
         res.end(String(e))
+        return
+      }
+    }
+
+    // Profile routes
+    if (req.url && req.url.startsWith('/profile')) {
+      try {
+        const { handler: profileHandler } = await import('./src/handlers/profile.js')
+        const event = {
+          requestContext: { http: { method: req.method, path: req.url } },
+          pathParameters: {},
+          body: req.method === 'POST' || req.method === 'PUT' ? await getRequestBody(req) : null,
+          headers: req.headers
+        }
+        
+        // Extract path parameters for delete operations
+        const urlParts = req.url.split('/')
+        if (urlParts.length > 3 && urlParts[2] === 'locations') {
+          event.pathParameters = { locationId: urlParts[3] }
+        }
+        
+        const result = await profileHandler(event)
+        const headers = Object.assign({}, defaultCors, result.headers || { 'content-type': 'application/json' })
+        res.writeHead(result.statusCode || 200, headers)
+        res.end(result.body)
+        return
+      } catch (e) {
+        const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' })
+        res.writeHead(500, headers)
+        res.end(JSON.stringify({ error: String(e) }))
         return
       }
     }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Map from '../components/Map'
+import Navigation from '../components/Navigation'
 import type { Suggestion } from '../../../shared/src/types/daylight'
 import { t, useLocale, type Locale } from '../i18n'
 
@@ -81,7 +82,9 @@ export default function Plan() {
 
   const { locale, setLocale } = useLocale()
   return (
-    <div className="p-6">
+    <>
+      <Navigation />
+      <div className="p-6">
       <div className="my-6">
         <Map
           center={mapCenter}
@@ -199,6 +202,7 @@ export default function Plan() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }
