@@ -11,8 +11,19 @@ await build({
   bundle: true,
   platform: 'node',
   target: 'node20',
-  format: 'cjs',
-  minify: true
+  format: 'esm',
+  minify: true,
+  external: [
+    // AWS SDK dependencies are provided by Lambda runtime
+    '@aws-sdk/*',
+    // Database dependencies (not needed for Lambda)
+    'sqlite3',
+    'sqlite',
+    'ioredis',
+    // Optional dependencies that should be external
+    '@aws-sdk/client-secrets-manager',
+    '@aws-sdk/client-ssm'
+  ]
 })
 
 function zipFile(srcFile, destZip) {

@@ -1,5 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
 import { fetchWeather, reverseGeocode, fetchEvents, fetchTrafficInfo } from '../lib/external'
+import { addCorsHeaders } from '../lib/cors.js'
 
 export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
   const now = new Date().toISOString()
@@ -30,14 +31,22 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: any) => {
     if (season?.season === 'winter') baseScore -= 5
     if (traffic?.congestion != null && traffic.congestion > 70) baseScore -= 10
 
-    return {
+    const response = {
       statusCode: 200,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify([
         { id: '1', title: 'Live Stop', start: now, end: now, score: baseScore, reason, season, events, traffic }
       ])
     }
+
+    return addCorsHeaders(response, event)
   } catch (err: any) {
-    return { statusCode: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify([{ id:'1', title:'Demo Stop', start:now, end:now, score:95, reason: `enrich failed: ${err.message}` }]) }
+    const errorResponse = { 
+      statusCode: 200, 
+      headers: { 'content-type': 'application/json' }, 
+      body: JSON.stringify([{ id:'1', title:'Demo Stop', start:now, end:now, score:95, reason: `enrich failed: ${err.message}` }]) 
+    }
+    
+    return addCorsHeaders(errorResponse, event)
   }
 }
