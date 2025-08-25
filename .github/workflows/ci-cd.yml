@@ -87,6 +87,7 @@ jobs:
 
       - name: Synthetic check
         env:
+          # Optional: Configure SLACK_WEBHOOK secret for notifications
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
         run: |
           if [ -n "$SLACK_WEBHOOK" ]; then

@@ -130,6 +130,24 @@ jobs:
       - name: Invalidate CDN
         if: ${{ secrets.CLOUDFRONT_DIST_ID != '' }}
         run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} --paths "/*"
+```
+
+### Optional CI/CD Secrets
+
+The following GitHub repository secrets can be configured for enhanced CI/CD functionality but are **not required** for basic operation:
+
+**Monitoring & Notifications:**
+- `SLACK_WEBHOOK` - Webhook URL for Slack notifications on deployment health checks
+- `LHCI_GITHUB_APP_TOKEN` - GitHub App token for enhanced Lighthouse CI features and PR comments
+
+**AWS Deployment:**
+- `AWS_ROLE_TO_ASSUME` - IAM role ARN for AWS deployment authentication
+- `SPA_BUCKET` - S3 bucket name for frontend deployment
+- `CLOUDFRONT_DIST_ID` - CloudFront distribution ID for cache invalidation
+
+> **Note:** Workflows gracefully handle missing secrets and provide fallback behavior. All CI/CD pipelines will run successfully whether these secrets are configured or not.
+
+> Secrets gating ensures PRs run CI, and main deploys only if AWS secrets exist.
 ```text
 
 > Secrets gating ensures PRs run CI, and main deploys only if AWS secrets exist.
