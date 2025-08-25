@@ -47,6 +47,10 @@ Recommended next steps for production
 2. Instrument and export cache metrics to your monitoring system (Prometheus, CloudWatch, etc.).
 3. Protect any admin endpoints with authentication, or remove them from production builds.
 
+Prometheus metrics
+
+The dev server exposes a Prometheus metrics endpoint at `/__metrics` which includes process metrics and cache gauges when available. This is implemented using `prom-client` and is intended for local or staging monitoring. In production, integrate with your monitoring stack and ensure the endpoint is protected.
+
 Troubleshooting
 
 - If `ioredis` is not installed or `REDIS_URL` is not set, the system will fall back to in-memory cache.

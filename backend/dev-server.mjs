@@ -183,6 +183,24 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // Prometheus metrics endpoint
+    if (req.url && req.url === '/__metrics') {
+      try {
+        const metrics = await import('./src/lib/metrics.mjs')
+        const { getCacheMetrics } = await import('./src/lib/external.js')
+        // update cache-related gauges
+        await metrics.publishCacheMetrics(getCacheMetrics)
+        const body = await metrics.register.metrics()
+        res.writeHead(200, { 'Content-Type': metrics.register.contentType })
+        res.end(body)
+        return
+      } catch (e) {
+        res.writeHead(500, defaultCors)
+        res.end(String(e))
+        return
+      }
+    }
+
     if (req.url && req.url.startsWith('/history')) {
       const url = new URL(req.url, `http://localhost`)
       const query = Object.fromEntries(url.searchParams.entries())
