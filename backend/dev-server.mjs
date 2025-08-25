@@ -127,6 +127,80 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // Admin cache endpoint for local dev: GET returns metrics, POST invalidates
+    if (req.url && req.url.startsWith('/__cache')) {
+      const url = new URL(req.url, `http://localhost`)
+      try {
+        const { getCacheMetrics, invalidateCacheFor, clearAllCaches } = await import('./src/lib/external.js')
+        // Optional admin token guard. If CACHE_ADMIN_TOKEN is set, require a matching token in
+        // Authorization: Bearer <token> or X-Admin-Token header.
+        const adminToken = process.env.CACHE_ADMIN_TOKEN
+        if (adminToken) {
+          const authHeader = (req.headers['authorization'] || req.headers['x-admin-token'] || '')
+          let token = ''
+          if (typeof authHeader === 'string') {
+            if (authHeader.toLowerCase().startsWith('bearer ')) token = authHeader.slice(7).trim()
+            else token = authHeader.trim()
+          }
+          if (token !== adminToken) {
+            res.writeHead(401, defaultCors)
+            res.end('Unauthorized')
+            return
+          }
+        }
+        if (req.method === 'GET') {
+          const metrics = getCacheMetrics()
+          const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' })
+          res.writeHead(200, headers)
+          res.end(JSON.stringify(metrics))
+          return
+        }
+        if (req.method === 'POST') {
+          let body = ''
+          for await (const chunk of req) body += chunk
+          let payload = {}
+          try { payload = JSON.parse(body || '{}') } catch (e) { }
+          if (payload.clear) {
+            const ok = await clearAllCaches()
+            res.writeHead(ok ? 200 : 500, defaultCors)
+            res.end(JSON.stringify({ cleared: !!ok }))
+            return
+          }
+          if (payload.type) {
+            const ok = await invalidateCacheFor(payload.type, payload.key)
+            res.writeHead(ok ? 200 : 500, defaultCors)
+            res.end(JSON.stringify({ invalidated: !!ok }))
+            return
+          }
+          res.writeHead(400, defaultCors)
+          res.end(JSON.stringify({ error: 'invalid payload' }))
+          return
+        }
+      } catch (e) {
+        res.writeHead(500, defaultCors)
+        res.end(String(e))
+        return
+      }
+    }
+
+    // Prometheus metrics endpoint
+    if (req.url && req.url === '/__metrics') {
+      try {
+        const metrics = await import('./src/lib/metrics.mjs')
+        const { getCacheMetrics } = await import('./src/lib/external.js')
+        // update cache-related gauges
+        await metrics.publishCacheMetrics(getCacheMetrics)
+        const body = await metrics.register.metrics()
+        res.writeHead(200, { 'Content-Type': metrics.register.contentType })
+        res.end(body)
+        return
+      } catch (e) {
+        res.writeHead(500, defaultCors)
+        res.end(String(e))
+        return
+      }
+    }
+
     if (req.url && req.url.startsWith('/history')) {
       const url = new URL(req.url, `http://localhost`)
       const query = Object.fromEntries(url.searchParams.entries())

@@ -1,8 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
 import { fetchWeather, reverseGeocode, fetchEvents, fetchTrafficInfo } from '../lib/external'
-// @ts-ignore
 import { info, error } from '../lib/logger.mjs'
-// @ts-ignore
 import { capturePromise } from '../lib/xray.mjs'
 
 

@@ -85,8 +85,15 @@ jobs:
       - name: Deploy placeholder
         run: echo "Deploy step - replace with real deployment logic."
 
-      - name: Synthetic check with Slack alert
+      - name: Synthetic check
         env:
+          # Optional: Configure SLACK_WEBHOOK secret for notifications
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
         run: |
-          bash ./synthetic-check.sh "https://d2ve6gb1nuejhg.cloudfront.net" "$SLACK_WEBHOOK"
+          if [ -n "$SLACK_WEBHOOK" ]; then
+            echo "Running synthetic check with Slack notifications"
+            bash ./synthetic-check.sh "https://d2ve6gb1nuejhg.cloudfront.net" "$SLACK_WEBHOOK"
+          else
+            echo "Running synthetic check without Slack notifications (SLACK_WEBHOOK not configured)"
+            bash ./synthetic-check.sh "https://d2ve6gb1nuejhg.cloudfront.net" ""
+          fi

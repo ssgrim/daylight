@@ -13,6 +13,7 @@
     "@aws-sdk/client-ssm": "^3.873.0",
     "@aws-sdk/lib-dynamodb": "^3.640.0",
     "ioredis": "^5.7.0",
+  "prom-client": "^15.1.0",
     "sqlite": "^4.1.2",
     "sqlite3": "^5.1.6",
     "suncalc": "^1.9.0"

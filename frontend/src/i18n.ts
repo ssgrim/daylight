@@ -43,12 +43,12 @@ export const messages: Record<Locale, Record<string, string>> = {
   }
 }
 
-export const useLocale = create<{ locale: Locale; setLocale: (l: Locale) => void }>((set: any) => ({
-  locale: 'en' as Locale,
-  setLocale: (locale: Locale) => set({ locale })
+export const useLocale = create<{ locale: Locale; setLocale: (l: Locale) => void }>((set) => ({
+  locale: 'en',
+  setLocale: (locale) => set({ locale })
 }))
 
 export function t(key: string) {
   const { locale } = useLocale.getState()
-  return messages[locale as Locale][key] || key
+  return messages[locale][key] || key
 }
