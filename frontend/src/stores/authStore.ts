@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { AuthService } from '../services/authServiceLazy'
 
 export interface User {
   sub: string
   email: string
-  name?: string
-  user_role?: 'viewer' | 'editor' | 'owner'
-  picture?: string
+  name: string
+  user_role: 'viewer' | 'editor' | 'owner'
 }
 
 export interface AuthState {

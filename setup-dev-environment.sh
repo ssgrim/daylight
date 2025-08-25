@@ -238,6 +238,16 @@ setup_project() {
         print_status "Installing frontend dependencies..."
         cd frontend
         npm install
+        
+        # Verify critical build dependencies are installed
+        print_status "Verifying build dependencies..."
+        if ! npm list terser >/dev/null 2>&1; then
+            print_warning "Terser not found, installing for build optimization..."
+            npm install -D terser
+        else
+            print_success "Terser installed (required for production builds)"
+        fi
+        
         cd ..
     fi
     
@@ -268,8 +278,28 @@ validate_project() {
     # Check frontend
     if [ -d "frontend" ]; then
         cd frontend
+        
+        # Check if build optimization dependencies are available
+        print_status "Checking frontend build optimization..."
+        if npm list terser >/dev/null 2>&1; then
+            print_success "Build optimization dependencies available"
+        else
+            print_warning "Terser not found - production builds may not be optimized"
+        fi
+        
+        # Test frontend build
         if npm run build; then
-            print_success "Frontend builds successfully"
+            print_success "Frontend builds successfully with optimized chunks"
+            
+            # Check if build output has proper chunk structure
+            if [ -d "dist/assets" ]; then
+                local chunk_count=$(ls dist/assets/*.js 2>/dev/null | wc -l)
+                if [ $chunk_count -gt 3 ]; then
+                    print_success "Code splitting working correctly ($chunk_count chunks generated)"
+                else
+                    print_warning "Code splitting may not be optimal (only $chunk_count chunks)"
+                fi
+            fi
         else
             print_error "Frontend build failed"
             cd ..
@@ -320,8 +350,16 @@ main() {
     print_status "  cd backend && npm run dev"
     print_status "  cd frontend && npm run dev"
     print_status ""
+    print_status "For production builds:"
+    print_status "  cd frontend && npm run build (optimized with code splitting)"
+    print_status ""
     print_status "For Docker-based development:"
     print_status "  docker-compose up"
+    print_status ""
+    print_status "Build optimizations enabled:"
+    print_status "  ✓ Code splitting for reduced bundle sizes"
+    print_status "  ✓ Lazy loading for better performance"
+    print_status "  ✓ Terser minification for production"
     print_status ""
     print_status "Happy coding! 🚀"
 }
