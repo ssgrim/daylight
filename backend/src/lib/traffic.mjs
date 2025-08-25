@@ -2,10 +2,11 @@ import { getSecretValue } from './secrets.mjs'
 import { timeoutFetch, retry } from './external-helpers.mjs'
 import { createCache } from './cache.mjs'
 
-const cache = createCache(20_000)
+const cachePromise = createCache(20_000)
 
 // Lightweight traffic adapter; by default returns mock congestion level
 export async function fetchTraffic(lat, lng) {
+  const cache = await cachePromise
   const provider = process.env.TRAFFIC_PROVIDER || 'mock'
   if (provider === 'here') {
   const cacheKey = `traffic:${lat},${lng}:here`

@@ -2,9 +2,9 @@
 import { createRedisCache } from './redis-cache.mjs'
 
 // Prefer Redis when REDIS_URL is configured and ioredis is installed.
-export function createCache(ttlMs = 60_000) {
+export async function createCache(ttlMs = 60_000) {
   try {
-    const redisCacheFactory = createRedisCache()
+    const redisCacheFactory = await createRedisCache()
     if (redisCacheFactory) {
       // adapt redis methods to the same shape as in-memory cache
       return {

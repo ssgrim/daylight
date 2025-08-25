@@ -87,3 +87,55 @@ variable "traffic_ssm_parameter" {
   type = string
   default = ""
 }
+
+# Health monitoring and alerting configuration
+variable "alert_email" {
+  description = "(optional) Email address to receive health check alerts. If provided, SNS subscription will be created."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
+  type        = number
+  default     = 14
+}
+
+variable "app_version" {
+  description = "Application version for health checks and monitoring"
+  type        = string
+  default     = "1.0.0"
+}
+
+variable "environment_name" {
+  description = "Environment name (dev, staging, production) for tagging and monitoring"
+  type        = string
+  default     = "development"
+}
+
+# --- Monitoring Variables ---
+
+variable "alert_email" {
+  description = "Email address to receive CloudWatch alerts (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "log_retention_days" {
+  description = "CloudWatch log retention period in days"
+  type        = number
+  default     = 14
+}
+
+variable "app_version" {
+  description = "Application version for monitoring and tagging"
+  type        = string
+  default     = "1.0.0"
+}
+
+variable "environment_name" {
+  description = "Environment name (dev, staging, production)"
+  type        = string
+  default     = "development"
+}

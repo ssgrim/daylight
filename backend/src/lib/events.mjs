@@ -2,12 +2,13 @@ import { getSecretValue } from './secrets.mjs'
 import { timeoutFetch, retry } from './external-helpers.mjs'
 import { createCache } from './cache.mjs'
 
-const cache = createCache(30_000)
+const cachePromise = createCache(30_000)
 
 // Lightweight local events adapter
 // Providers supported: 'ticketmaster' (via API key), otherwise 'mock'
 
 export async function fetchLocalEvents(lat, lng) {
+  const cache = await cachePromise
   const provider = process.env.EVENTS_PROVIDER || 'mock'
   if (provider === 'ticketmaster') {
   const cacheKey = `events:${lat},${lng}:tm`

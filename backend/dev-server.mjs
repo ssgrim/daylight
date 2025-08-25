@@ -6,6 +6,15 @@ import { handler as planHandler } from './dist/handlers/plan.js'
 import { initDb, queryHistory } from './src/lib/history.mjs'
 import { getSeasonFor } from './src/lib/season.mjs'
 
+// Dynamically import health handler to avoid startup cycles
+let healthHandler = null
+import('./dist/handlers/health.js').then(module => {
+  healthHandler = module.handler
+  console.log('health handler loaded')
+}).catch(err => {
+  console.warn('health handler load failed', String(err))
+})
+
 const PORT = process.env.PORT || 5174
 
 let historyDb = null
@@ -62,6 +71,47 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         res.writeHead(500, defaultCors)
         res.end(String(e))
+        return
+      }
+    }
+
+    // Health check endpoint
+    if (req.url && req.url.startsWith('/health')) {
+      if (!healthHandler) {
+        const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' })
+        res.writeHead(503, headers)
+        res.end(JSON.stringify({ 
+          status: 'unhealthy', 
+          message: 'Health handler not loaded',
+          timestamp: new Date().toISOString()
+        }))
+        return
+      }
+
+      try {
+        const url = new URL(req.url, `http://localhost`)
+        const queryStringParameters = Object.fromEntries(url.searchParams.entries())
+        
+        // Create Lambda-like event object
+        const event = {
+          requestContext: { http: { method: req.method } },
+          queryStringParameters,
+          headers: req.headers
+        }
+
+        const result = await healthHandler(event)
+        const headers = Object.assign({}, defaultCors, result.headers || { 'content-type': 'application/json' })
+        res.writeHead(result.statusCode || 200, headers)
+        res.end(result.body)
+        return
+      } catch (e) {
+        const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' })
+        res.writeHead(500, headers)
+        res.end(JSON.stringify({ 
+          status: 'unhealthy', 
+          error: String(e),
+          timestamp: new Date().toISOString()
+        }))
         return
       }
     }

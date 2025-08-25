@@ -6,13 +6,21 @@ import path from 'node:path'
 mkdirSync('dist', { recursive: true })
 
 await build({
-  entryPoints: ['src/handlers/trips.ts', 'src/handlers/plan.ts'],
+  entryPoints: ['src/handlers/trips.ts', 'src/handlers/plan.ts', 'src/handlers/health.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  minify: true
+  minify: true,
+  external: [
+    '@aws-sdk/client-dynamodb',
+    '@aws-sdk/client-secrets-manager', 
+    '@aws-sdk/client-ssm',
+    'sqlite3',
+    'sqlite',
+    'ioredis'
+  ]
 })
 
 function zipFile(srcFile, destZip) {
@@ -35,4 +43,5 @@ function zipFile(srcFile, destZip) {
 
 zipFile('dist/trips.js', 'dist/trips.zip')
 zipFile('dist/plan.js', 'dist/plan.zip')
+zipFile('dist/health.js', 'dist/health.zip')
 console.log('Built Lambda zips')
