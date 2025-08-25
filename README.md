@@ -8,7 +8,6 @@ For the full implementation plan and architecture details, see:
 
 - [Daylight v1 Implementation Pack (AWS, React, Vite, Terraform, CI)](docs/daylight_v_1_implementation_pack_aws_react_vite_terraform_ci.md)
 
-
 ## Status (quick)
 
 - Shared types: done — `shared/src/types/daylight.ts` contains OpenAPI-aligned TS types (Trip, Anchor, PlanRequest/Response, Prefs).
@@ -55,7 +54,7 @@ External integrations:
 
 - The backend includes lightweight adapters for public external data sources in `backend/src/lib/external.ts` (Open‑Meteo for weather and Nominatim for reverse geocoding). These are used by the `/plan` handler when `lat` and `lng` query parameters are provided. Example:
 
-```text
+````text
 GET /plan?lat=47.6&lng=-122.33
 ```text
 
@@ -140,10 +139,12 @@ jobs:
 
 **`.eslintignore`**
 
-```
+````
+
 node_modules
-**/dist
-```
+\*\*/dist
+
+````
 
 **Root ESLint (add `.eslintrc.json`)**
 
@@ -155,7 +156,7 @@ node_modules
   "parserOptions": { "ecmaVersion": 2022, "sourceType": "module" },
   "rules": { "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }] }
 }
-```
+````
 
 **Prettier**
 
@@ -167,10 +168,11 @@ node_modules
 
 ## 9) README (root) — setup & run
 
-```md
+````md
 # Daylight
 
 ## Prereqs
+
 - Node 20+
 - AWS account with permissions (admin or constrained), AWS CLI configured
 - Terraform 1.7+
@@ -180,6 +182,7 @@ node_modules
 ```bash
 npm i
 ```
+````
 
 ## Local builds
 
@@ -251,10 +254,11 @@ See `infra/README.md`.
 
 ---
 
-## 12) Next steps 
+## 12) Next steps
 - Cognito + RBAC (viewer/editor/owner) with API authorizers.
 - Candidate discovery integrations (Places, NPS, weather, AQI, wildfire alerts) via separate Lambdas.
 - Solver improvements (time‑windows, OR‑Tools or metaheuristics).
 - Offline map regions & background sync; web push for re‑plan suggestions.
 - Budget guardrails & printable/shareable trip cards.
 
+```

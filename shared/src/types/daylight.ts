@@ -5,7 +5,7 @@ export interface Anchor {
   id: string;
   name: string;
   start: string; // ISO date-time
-  end: string;   // ISO date-time
+  end: string; // ISO date-time
   lat: number;
   lng: number;
   locked?: boolean;
@@ -35,7 +35,7 @@ export interface Suggestion {
   id: string;
   title: string;
   start: string; // ISO date-time
-  end: string;   // ISO date-time
+  end: string; // ISO date-time
   score: number;
   reason?: string;
 }
