@@ -97,6 +97,29 @@ resource "aws_dynamodb_table" "trips" {
     name = "tripId"
     type = "S"
   }
+
+  attribute {
+    name = "ownerId"
+    type = "S"
+  }
+
+  attribute {
+    name = "createdAt"
+    type = "S"
+  }
+
+  # GSI for efficient querying by owner with created date sorting
+  global_secondary_index {
+    name     = "OwnerIndex"
+    hash_key = "ownerId"
+    range_key = "createdAt"
+    projection_type = "ALL"
+  }
+
+  tags = {
+    Name        = "Daylight Trips Table"
+    Environment = var.environment
+  }
 }
 
 # --- Lambda IAM role & policy ---
@@ -290,9 +313,34 @@ resource "aws_apigatewayv2_integration" "trips" {
   payload_format_version = "2.0"
 }
 
+# Trip routes
 resource "aws_apigatewayv2_route" "post_trips" {
   api_id    = aws_apigatewayv2_api.api.id
   route_key = "POST /trips"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+}
+
+resource "aws_apigatewayv2_route" "get_trips" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /trips"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+}
+
+resource "aws_apigatewayv2_route" "get_trip" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /trips/{tripId}"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+}
+
+resource "aws_apigatewayv2_route" "put_trip" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "PUT /trips/{tripId}"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+}
+
+resource "aws_apigatewayv2_route" "delete_trip" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "DELETE /trips/{tripId}"
   target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
 }
 

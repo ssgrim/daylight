@@ -3,6 +3,7 @@ import http from "http";
 import fs from "node:fs";
 import path from "node:path";
 import { handler as planHandler } from "./dist/handlers/plan.js";
+import { handler as tripsHandler } from "./dist/handlers/trips.js";
 import { initDb, queryHistory } from "./src/lib/history.mjs";
 import { getSeasonFor } from "./src/lib/season.mjs";
 
@@ -431,6 +432,59 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // Trips API endpoints
+    if (req.url && req.url.startsWith("/api/trips")) {
+      try {
+        // Create an API Gateway-like event object for the handler
+        const url = new URL(req.url, `http://localhost`);
+        const pathSegments = url.pathname.split('/').filter(Boolean);
+        
+        // Extract tripId from path like /api/trips/{tripId}
+        const tripId = pathSegments.length > 2 ? pathSegments[2] : undefined;
+        
+        // Get request body for POST/PUT requests
+        let body = '';
+        if (req.method === 'POST' || req.method === 'PUT') {
+          for await (const chunk of req) {
+            body += chunk;
+          }
+        }
+
+        const event = {
+          requestContext: {
+            http: {
+              method: req.method,
+              sourceIp: req.socket.remoteAddress || '127.0.0.1'
+            }
+          },
+          pathParameters: tripId ? { tripId } : {},
+          queryStringParameters: Object.fromEntries(url.searchParams.entries()),
+          headers: {
+            authorization: req.headers.authorization,
+            Authorization: req.headers.authorization,
+            'content-type': req.headers['content-type']
+          },
+          body: body || null
+        };
+
+        const result = await tripsHandler(event);
+        
+        const headers = {
+          ...defaultHeaders,
+          'content-type': 'application/json',
+          ...corsHeaders,
+          ...securityHeaders,
+        };
+
+        res.writeHead(result.statusCode, headers);
+        res.end(result.body);
+        return;
+      } catch (err) {
+        console.error("🔥 Trips API error:", err);
+        return sendError(500, "Service temporarily unavailable");
+      }
+    }
+
     // Health check endpoint
     if (req.url === "/health" || req.url === "/healthz") {
       const healthData = {
@@ -483,6 +537,11 @@ server.listen(PORT, () => {
   console.log("📊 Available endpoints:");
   console.log("  GET  /health - Health check");
   console.log("  GET  /plan?lat=X&lng=Y - Trip planning");
+  console.log("  POST /api/trips - Create trip");
+  console.log("  GET  /api/trips - List trips");
+  console.log("  GET  /api/trips/{id} - Get trip");
+  console.log("  PUT  /api/trips/{id} - Update trip");
+  console.log("  DELETE /api/trips/{id} - Delete trip");
   console.log("  GET  /history - Request history");
   if (NODE_ENV !== "production") {
     console.log("  GET  /__internal_events?lat=X&lng=Y - Events (dev only)");
