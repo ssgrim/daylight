@@ -5,31 +5,83 @@ import { info, error } from '../lib/logger.mjs'
 // @ts-ignore
 import { capturePromise } from '../lib/xray.mjs'
 
+// Input validation functions
+function validateCoordinates(lat: any, lng: any): { lat: number; lng: number } {
+  const numLat = Number(lat)
+  const numLng = Number(lng)
+  
+  if (!lat || !lng || isNaN(numLat) || isNaN(numLng)) {
+    throw new Error('Invalid coordinates: lat and lng must be valid numbers')
+  }
+  
+  if (numLat < -90 || numLat > 90) {
+    throw new Error(`Invalid latitude: ${numLat}. Must be between -90 and 90`)
+  }
+  
+  if (numLng < -180 || numLng > 180) {
+    throw new Error(`Invalid longitude: ${numLng}. Must be between -180 and 180`)
+  }
+  
+  return { lat: numLat, lng: numLng }
+}
+
+function sanitizeQueryParams(params: any): Record<string, string> {
+  if (!params || typeof params !== 'object') {
+    return {}
+  }
+  
+  const sanitized: Record<string, string> = {}
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === 'string' && value.length <= 100) {
+      sanitized[key] = value.trim()
+    }
+  }
+  return sanitized
+}
+
 
 async function planHandler(event: any) {
   const now = new Date().toISOString()
-  const requestId = event?.requestContext?.requestId || event?.requestContext?.requestId || undefined
+  const requestId = event?.requestContext?.requestId || 'unknown'
+  
   try {
-    const q = event.queryStringParameters || {}
-    const lat = q.lat ? Number(q.lat) : NaN
-    const lng = q.lng ? Number(q.lng) : NaN
+    info({ requestId }, 'plan handler start')
+    
+    // Validate and sanitize input
+    const queryParams = sanitizeQueryParams(event.queryStringParameters)
     let reason: string | undefined
     let season = null
     let events = null
     let traffic = null
-    info({ requestId }, 'plan handler start', { lat, lng })
-    if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-      const [w, g, ev, tr] = await Promise.all([
+    
+    if (queryParams.lat && queryParams.lng) {
+      const { lat, lng } = validateCoordinates(queryParams.lat, queryParams.lng)
+      info({ requestId }, 'validated coordinates', { lat, lng })
+      
+      // Call external services with proper error handling
+      const [w, g, ev, tr] = await Promise.allSettled([
         fetchWeather(lat, lng),
         reverseGeocode(lat, lng),
         fetchEvents(lat, lng),
         fetchTrafficInfo(lat, lng)
       ])
-      reason = [g.display_name, w.summary].filter(Boolean).join(' — ')
-      season = (w && w.season) || null
-      events = ev
-      traffic = tr
-      info({ requestId }, 'plan handler data', { reason, season, events, traffic })
+      
+      // Handle results safely
+      const weather = w.status === 'fulfilled' ? w.value : null
+      const geocode = g.status === 'fulfilled' ? g.value : null
+      events = ev.status === 'fulfilled' ? ev.value : null
+      traffic = tr.status === 'fulfilled' ? tr.value : null
+      
+      // Log any failures for monitoring
+      if (w.status === 'rejected') info({ requestId }, 'weather fetch failed', { error: w.reason })
+      if (g.status === 'rejected') info({ requestId }, 'geocode fetch failed', { error: g.reason })
+      if (ev.status === 'rejected') info({ requestId }, 'events fetch failed', { error: ev.reason })
+      if (tr.status === 'rejected') info({ requestId }, 'traffic fetch failed', { error: tr.reason })
+      
+      reason = [geocode?.display_name, weather?.summary].filter(Boolean).join(' — ')
+      season = (weather && weather.season) || null
+      
+      info({ requestId }, 'plan handler data processed', { reason, season, events: !!events, traffic: !!traffic })
     }
 
     // simple season-aware scoring: base 95, + for summer, - for winter, and penalize high congestion

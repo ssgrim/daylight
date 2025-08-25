@@ -1,4 +1,26 @@
 {
+  "name": "daylight",
+  "version": "0.2.0",
+  "description": "Cloud-first trip planning and live re-planning engine",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "tf:init": "cd infra/terraform && terraform init",
+    "tf:plan": "cd infra/terraform && terraform plan",
+    "tf:apply": "cd infra/terraform && terraform apply",
+    "tf:validate": "cd infra/terraform && terraform validate",
+    "setup": "./setup-dev-environment.sh",
+    "clean": "rm -rf backend/node_modules frontend/node_modules backend/dist frontend/dist"
+  },
   "dependencies": {
     "mapbox-gl": "^3.14.0",
     "react": "^19.1.1",
@@ -10,6 +32,25 @@
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.11",
-    "@types/react-dom": "^19.1.7"
-  }
+    "@types/react-dom": "^19.1.7",
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=22.17.0",
+    "npm": ">=9.8.1"
+  },
+  "keywords": [
+    "travel",
+    "planning",
+    "aws",
+    "terraform",
+    "react",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ssgrim/daylight.git"
+  },
+  "author": "Development Team",
+  "license": "MIT"
 }

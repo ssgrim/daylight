@@ -11,8 +11,11 @@ await build({
   bundle: true,
   platform: 'node',
   target: 'node20',
-  format: 'cjs',
-  minify: true
+  format: 'esm',
+  minify: true,
+  banner: {
+    js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
+  }
 })
 
 function zipFile(srcFile, destZip) {

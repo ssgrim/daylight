@@ -4,6 +4,24 @@ variable "region" {
   default     = "us-west-1"  # N. California
 }
 
+variable "allowed_origins" {
+  description = "List of allowed CORS origins for the API"
+  type        = list(string)
+  default     = ["http://localhost:5173", "http://localhost:4173"]
+}
+
+variable "api_rate_limit" {
+  description = "API Gateway rate limit (requests per second)"
+  type        = number
+  default     = 100
+}
+
+variable "api_burst_limit" {
+  description = "API Gateway burst limit"
+  type        = number
+  default     = 200
+}
+
 variable "mapbox_token" {
   description = "(optional) Mapbox API token for reverse geocoding"
   type        = string
@@ -86,4 +104,22 @@ variable "traffic_ssm_parameter" {
   description = "(optional) SSM parameter name to read traffic API key from (SecureString)."
   type = string
   default = ""
+}
+
+variable "enable_deletion_protection" {
+  description = "Enable deletion protection for DynamoDB tables"
+  type        = bool
+  default     = false  # Set to true for production
+}
+
+variable "env" {
+  description = "Environment name (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+}
+
+variable "alert_email" {
+  description = "Email address for CloudWatch alerts (optional)"
+  type        = string
+  default     = ""
 }
