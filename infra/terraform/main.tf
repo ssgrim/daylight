@@ -161,8 +161,93 @@ resource "aws_lambda_function" "plan" {
   runtime          = "nodejs20.x"
   filename         = "${var.backend_zip_dir}/plan.zip"
   source_code_hash = filebase64sha256("${var.backend_zip_dir}/plan.zip")
-  environment { variables = { TABLE_TRIPS = aws_dynamodb_table.trips.name } }
+  environment {
+    variables = {
+      TABLE_TRIPS       = aws_dynamodb_table.trips.name
+      GEOCODE_PROVIDER  = var.geocode_provider
+      WEATHER_PROVIDER  = var.weather_provider
+      MAPBOX_TOKEN      = var.mapbox_token
+  GOOGLE_MAPS_KEY   = var.google_maps_key
+  SEASON_MODE       = var.season_mode
+      MAPBOX_SECRET_ARN = var.mapbox_secret_arn
+      GOOGLE_MAPS_SECRET_ARN = var.google_maps_secret_arn
+  EVENTS_SECRET_ARN = var.events_secret_arn
+  TRAFFIC_SECRET_ARN = var.traffic_secret_arn
+      EVENTS_SSM_PARAMETER = var.events_ssm_parameter
+      TRAFFIC_SSM_PARAMETER = var.traffic_ssm_parameter
+    }
+  }
 }
+
+// Optionally create secrets from plaintext variables (useful for quick dev only)
+resource "aws_secretsmanager_secret" "mapbox_token" {
+  count = var.mapbox_token_value != "" ? 1 : 0
+  name  = "daylight_mapbox_token_${random_pet.suffix.id}"
+}
+resource "aws_secretsmanager_secret_version" "mapbox_token_version" {
+  count      = var.mapbox_token_value != "" ? 1 : 0
+  secret_id  = aws_secretsmanager_secret.mapbox_token[0].id
+  secret_string = var.mapbox_token_value
+}
+output "mapbox_secret_arn_created" {
+  value = aws_secretsmanager_secret.mapbox_token.*.arn
+}
+
+resource "aws_secretsmanager_secret" "events_key" {
+  count = var.events_api_key_value != "" ? 1 : 0
+  name  = "daylight_events_key_${random_pet.suffix.id}"
+}
+resource "aws_secretsmanager_secret_version" "events_key_version" {
+  count      = var.events_api_key_value != "" ? 1 : 0
+  secret_id  = aws_secretsmanager_secret.events_key[0].id
+  secret_string = var.events_api_key_value
+}
+output "events_secret_arn_created" {
+  value = aws_secretsmanager_secret.events_key.*.arn
+}
+
+resource "aws_secretsmanager_secret" "traffic_key" {
+  count = var.traffic_api_key_value != "" ? 1 : 0
+  name  = "daylight_traffic_key_${random_pet.suffix.id}"
+}
+resource "aws_secretsmanager_secret_version" "traffic_key_version" {
+  count      = var.traffic_api_key_value != "" ? 1 : 0
+  secret_id  = aws_secretsmanager_secret.traffic_key[0].id
+  secret_string = var.traffic_api_key_value
+}
+output "traffic_secret_arn_created" {
+  value = aws_secretsmanager_secret.traffic_key.*.arn
+}
+
+// If secret ARNs are provided, give the lambda permission to read them
+resource "aws_iam_policy" "lambda_read_secrets" {
+  count = (var.mapbox_secret_arn != "" || var.google_maps_secret_arn != "") ? 1 : 0
+  name  = "daylight_lambda_read_secrets_${random_pet.suffix.id}"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = ["secretsmanager:GetSecretValue","ssm:GetParameter","ssm:GetParameters"],
+        Resource = compact([var.mapbox_secret_arn, var.google_maps_secret_arn])
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_read_secrets_attach" {
+  count      = aws_iam_policy.lambda_read_secrets.*.id == [] ? 0 : 1
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.lambda_read_secrets[0].arn
+}
+
+locals {
+  mapbox_token     = var.mapbox_token
+  geocode_provider = var.geocode_provider
+  weather_provider = var.weather_provider
+}
+
+/* provider environment variables are wired into the plan lambda above via environment.variables */
 
 # --- API Gateway (HTTP API) ---
 resource "aws_apigatewayv2_api" "api" {
