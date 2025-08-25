@@ -1,37 +1,9 @@
+/**
+ * Advanced Trips Management with Search Functionality
+ * Provides comprehensive CRUD operations with filtering, sorting, and search
+ */
+
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
-
-// Enhanced Trip interface
-interface Trip {
-  tripId: string
-  ownerId: string
-  name: string
-  description?: string
-  status: 'draft' | 'active' | 'completed' | 'cancelled'
-  tags: string[]
-  isPublic: boolean
-  createdAt: string
-  updatedAt: string
-  anchors: Array<{
-    lat: number
-    lng: number
-    name: string
-    description?: string
-  }>
-  preferences?: Record<string, any>
-  metadata?: Record<string, any>
-}
-
-// Search and filter parameters
-interface TripSearchParams {
-  limit?: number
-  sortBy?: 'createdAt' | 'updatedAt' | 'name'
-  sortOrder?: 'asc' | 'desc'
-  status?: string
-  tag?: string
-  search?: string
-  lastKey?: string
-  ownerId?: string
-}
 
 // Simple in-memory cache for development
 interface SimpleCache {
@@ -68,6 +40,39 @@ function createSimpleCache(): SimpleCache {
   }
 }
 
+// Enhanced Trip interface
+export interface Trip {
+  tripId: string
+  ownerId: string
+  name: string
+  description?: string
+  status: 'draft' | 'active' | 'completed' | 'cancelled'
+  tags: string[]
+  isPublic: boolean
+  createdAt: string
+  updatedAt: string
+  anchors: Array<{
+    lat: number
+    lng: number
+    name: string
+    description?: string
+  }>
+  preferences?: Record<string, any>
+  metadata?: Record<string, any>
+}
+
+// Search and filter parameters
+export interface TripSearchParams {
+  limit?: number
+  sortBy?: 'createdAt' | 'updatedAt' | 'name'
+  sortOrder?: 'asc' | 'desc'
+  status?: string
+  tag?: string
+  search?: string
+  lastKey?: string
+  ownerId?: string
+}
+
 // In-memory storage for development (replace with DynamoDB in production)
 const trips: Map<string, Trip> = new Map()
 
@@ -84,7 +89,7 @@ function generateTripId(): string {
 /**
  * Create a new trip
  */
-async function createTrip(tripData: Partial<Trip>, ownerId: string): Promise<Trip> {
+export async function createTrip(tripData: Partial<Trip>, ownerId: string): Promise<Trip> {
   const tripId = generateTripId()
   const now = new Date().toISOString()
   
@@ -116,7 +121,7 @@ async function createTrip(tripData: Partial<Trip>, ownerId: string): Promise<Tri
 /**
  * Get a single trip by ID
  */
-async function getTrip(tripId: string, ownerId: string): Promise<Trip | null> {
+export async function getTrip(tripId: string, ownerId: string): Promise<Trip | null> {
   const trip = trips.get(tripId)
   if (!trip || trip.ownerId !== ownerId) {
     return null
@@ -127,7 +132,7 @@ async function getTrip(tripId: string, ownerId: string): Promise<Trip | null> {
 /**
  * Update an existing trip
  */
-async function updateTrip(tripId: string, updates: Partial<Trip>, ownerId: string): Promise<Trip | null> {
+export async function updateTrip(tripId: string, updates: Partial<Trip>, ownerId: string): Promise<Trip | null> {
   const existing = trips.get(tripId)
   if (!existing || existing.ownerId !== ownerId) {
     return null
@@ -154,7 +159,7 @@ async function updateTrip(tripId: string, updates: Partial<Trip>, ownerId: strin
 /**
  * Delete a trip
  */
-async function deleteTrip(tripId: string, ownerId: string): Promise<boolean> {
+export async function deleteTrip(tripId: string, ownerId: string): Promise<boolean> {
   const existing = trips.get(tripId)
   if (!existing || existing.ownerId !== ownerId) {
     return false
@@ -173,7 +178,7 @@ async function deleteTrip(tripId: string, ownerId: string): Promise<boolean> {
 /**
  * Advanced search functionality with filtering, sorting, and pagination
  */
-async function searchTrips(params: TripSearchParams): Promise<{
+export async function searchTrips(params: TripSearchParams): Promise<{
   items: Trip[]
   count: number
   hasMore: boolean
@@ -292,7 +297,7 @@ async function searchTrips(params: TripSearchParams): Promise<{
 /**
  * Get search suggestions based on partial input
  */
-async function getSearchSuggestions(query: string, ownerId: string): Promise<{
+export async function getSearchSuggestions(query: string, ownerId: string): Promise<{
   names: string[]
   tags: string[]
   descriptions: string[]
@@ -340,7 +345,7 @@ async function getSearchSuggestions(query: string, ownerId: string): Promise<{
 /**
  * Get trip statistics for the owner
  */
-async function getTripStats(ownerId: string): Promise<{
+export async function getTripStats(ownerId: string): Promise<{
   total: number
   byStatus: Record<string, number>
   topTags: Array<{ tag: string; count: number }>
@@ -387,7 +392,7 @@ async function getTripStats(ownerId: string): Promise<{
 /**
  * Initialize with some sample data for development
  */
-async function initializeSampleData() {
+export async function initializeSampleData() {
   const sampleTrips = [
     {
       name: 'Mountain Adventure',
@@ -431,254 +436,4 @@ async function initializeSampleData() {
   }
   
   console.log('Sample trip data initialized')
-}
-
-// Initialize sample data on first load
-let initialized = false
-
-async function ensureInitialized() {
-  if (!initialized) {
-    await initializeSampleData()
-    initialized = true
-  }
-}
-
-/**
- * Extract user ID from authorization header
- * In production, this would validate JWT token
- */
-function extractUserId(event: any): string {
-  const authHeader = event.headers?.authorization || event.headers?.Authorization
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    // In production, decode JWT token to get user ID
-    // For development, use a default user ID
-    return 'user-123'
-  }
-  return 'anonymous'
-}
-
-/**
- * Parse query parameters with proper type conversion
- */
-function parseQueryParams(params: Record<string, string | undefined> | null): TripSearchParams {
-  if (!params) return {}
-  
-  return {
-    limit: params.limit ? Math.min(Math.max(parseInt(params.limit), 1), 100) : 20,
-    sortBy: ['createdAt', 'updatedAt', 'name'].includes(params.sortBy || '') 
-      ? params.sortBy as any : 'createdAt',
-    sortOrder: ['asc', 'desc'].includes(params.sortOrder || '') 
-      ? params.sortOrder as any : 'desc',
-    status: params.status,
-    tag: params.tag,
-    search: params.search,
-    lastKey: params.lastKey
-  }
-}
-
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
-  const { requestContext, body, pathParameters, queryStringParameters } = event
-  const method = requestContext.http.method
-  const path = requestContext.http.path
-  
-  // Initialize sample data
-  await ensureInitialized()
-  
-  // Extract user ID from auth header
-  const userId = extractUserId(event)
-  
-  // Set CORS headers
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    'Content-Type': 'application/json'
-  }
-  
-  try {
-    // Handle OPTIONS request
-    if (method === 'OPTIONS') {
-      return {
-        statusCode: 204,
-        headers: corsHeaders
-      }
-    }
-    
-    // Handle search suggestions endpoint
-    if (method === 'GET' && path.includes('/suggestions')) {
-      const query = queryStringParameters?.q || ''
-      if (!query) {
-        return {
-          statusCode: 400,
-          headers: corsHeaders,
-          body: JSON.stringify({ error: 'Query parameter "q" is required' })
-        }
-      }
-      
-      const suggestions = await getSearchSuggestions(query, userId)
-      return {
-        statusCode: 200,
-        headers: corsHeaders,
-        body: JSON.stringify(suggestions)
-      }
-    }
-    
-    // Handle stats endpoint
-    if (method === 'GET' && path.includes('/stats')) {
-      const stats = await getTripStats(userId)
-      return {
-        statusCode: 200,
-        headers: corsHeaders,
-        body: JSON.stringify(stats)
-      }
-    }
-    
-    // Handle single trip operations
-    const tripId = pathParameters?.id || pathParameters?.tripId
-    if (tripId) {
-      switch (method) {
-        case 'GET':
-          const trip = await getTrip(tripId, userId)
-          if (!trip) {
-            return {
-              statusCode: 404,
-              headers: corsHeaders,
-              body: JSON.stringify({ error: 'Trip not found' })
-            }
-          }
-          return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify(trip)
-          }
-          
-        case 'PUT':
-          if (!body) {
-            return {
-              statusCode: 400,
-              headers: corsHeaders,
-              body: JSON.stringify({ error: 'Request body is required' })
-            }
-          }
-          
-          let updateData: Partial<Trip>
-          try {
-            updateData = JSON.parse(body)
-          } catch (e) {
-            return {
-              statusCode: 400,
-              headers: corsHeaders,
-              body: JSON.stringify({ error: 'Invalid JSON in request body' })
-            }
-          }
-          
-          const updatedTrip = await updateTrip(tripId, updateData, userId)
-          if (!updatedTrip) {
-            return {
-              statusCode: 404,
-              headers: corsHeaders,
-              body: JSON.stringify({ error: 'Trip not found' })
-            }
-          }
-          
-          return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-              message: 'Trip updated successfully',
-              trip: updatedTrip
-            })
-          }
-          
-        case 'DELETE':
-          const deleted = await deleteTrip(tripId, userId)
-          if (!deleted) {
-            return {
-              statusCode: 404,
-              headers: corsHeaders,
-              body: JSON.stringify({ error: 'Trip not found' })
-            }
-          }
-          
-          return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({ message: 'Trip deleted successfully' })
-          }
-      }
-    }
-    
-    // Handle trips collection operations
-    switch (method) {
-      case 'GET':
-        // List/search trips with advanced filtering
-        const searchParams = parseQueryParams(queryStringParameters || null)
-        searchParams.ownerId = userId
-        
-        const results = await searchTrips(searchParams)
-        return {
-          statusCode: 200,
-          headers: corsHeaders,
-          body: JSON.stringify(results)
-        }
-        
-      case 'POST':
-        // Create new trip
-        if (!body) {
-          return {
-            statusCode: 400,
-            headers: corsHeaders,
-            body: JSON.stringify({ error: 'Request body is required' })
-          }
-        }
-        
-        let tripData: Partial<Trip>
-        try {
-          tripData = JSON.parse(body)
-        } catch (e) {
-          return {
-            statusCode: 400,
-            headers: corsHeaders,
-            body: JSON.stringify({ error: 'Invalid JSON in request body' })
-          }
-        }
-        
-        // Validate required fields
-        if (!tripData.name) {
-          return {
-            statusCode: 400,
-            headers: corsHeaders,
-            body: JSON.stringify({ error: 'Trip name is required' })
-          }
-        }
-        
-        const newTrip = await createTrip(tripData, userId)
-        return {
-          statusCode: 201,
-          headers: corsHeaders,
-          body: JSON.stringify({
-            tripId: newTrip.tripId,
-            message: 'Trip created successfully',
-            trip: newTrip
-          })
-        }
-        
-      default:
-        return {
-          statusCode: 405,
-          headers: corsHeaders,
-          body: JSON.stringify({ error: 'Method not allowed' })
-        }
-    }
-  } catch (error) {
-    console.error('Error in trips handler:', error)
-    return {
-      statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({ 
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : String(error)
-      })
-    }
-  }
 }
