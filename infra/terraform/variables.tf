@@ -1,3 +1,9 @@
+variable "environment" {
+  description = "Environment name (development, staging, production)"
+  type        = string
+  default     = "development"
+}
+
 variable "region" {
   description = "AWS region to deploy to"
   type        = string

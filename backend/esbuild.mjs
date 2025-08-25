@@ -6,13 +6,17 @@ import path from 'node:path'
 mkdirSync('dist', { recursive: true })
 
 await build({
-  entryPoints: ['src/handlers/trips.ts', 'src/handlers/plan.ts'],
+  entryPoints: ['src/handlers/trips.ts', 'src/handlers/plan.ts', 'src/handlers/auth.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  minify: true
+  minify: true,
+  external: [
+    'aws-jwt-verify',
+    '@aws-sdk/client-cognito-identity-provider'
+  ]
 })
 
 function zipFile(srcFile, destZip) {
@@ -35,4 +39,5 @@ function zipFile(srcFile, destZip) {
 
 zipFile('dist/trips.js', 'dist/trips.zip')
 zipFile('dist/plan.js', 'dist/plan.zip')
+zipFile('dist/auth.js', 'dist/auth.zip')
 console.log('Built Lambda zips')

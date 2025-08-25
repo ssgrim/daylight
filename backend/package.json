@@ -9,16 +9,17 @@
     "dev": "node ./dev-server.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.640.0",
     "@aws-sdk/client-dynamodb": "^3.640.0",
+    "@aws-sdk/client-kms": "^3.640.0",
+    "@aws-sdk/client-secrets-manager": "^3.640.0",
     "@aws-sdk/client-ssm": "^3.873.0",
     "@aws-sdk/lib-dynamodb": "^3.640.0",
+    "aws-jwt-verify": "^4.0.1",
     "ioredis": "^5.7.0",
     "sqlite": "^4.1.2",
     "sqlite3": "^5.1.6",
     "suncalc": "^1.9.0"
-  },
-  "optionalDependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.640.0"
   },
   "engines": {
     "node": ">=18"

@@ -1,9 +1,12 @@
 let redis = null
-try {
-  const IORedis = await import('ioredis')
-  redis = IORedis.default
-} catch (e) {
-  // optional dependency not installed
+
+async function initRedis() {
+  try {
+    const IORedis = await import('ioredis')
+    redis = IORedis.default
+  } catch (e) {
+    // optional dependency not installed
+  }
 }
 
 export function createRedisCache() {
@@ -16,5 +19,8 @@ export function createRedisCache() {
     async clear() { try { await client.flushdb() } catch (e) { /* ignore */ } }
   }
 }
+
+// Initialize Redis when the module is first imported
+initRedis()
 
 export default { createRedisCache }

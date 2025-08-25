@@ -255,7 +255,7 @@ resource "aws_apigatewayv2_api" "api" {
   protocol_type = "HTTP"
   cors_configuration {
     allow_headers = ["*"]
-    allow_methods = ["GET","POST","OPTIONS"]
+    allow_methods = ["GET","POST","PUT","DELETE","OPTIONS"]
     allow_origins = ["*"]
   }
 }
@@ -296,12 +296,36 @@ resource "aws_apigatewayv2_route" "post_trips" {
   target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
 }
 
+resource "aws_apigatewayv2_route" "get_trips" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /trips"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+}
+
+resource "aws_apigatewayv2_route" "get_trip" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /trips/{tripId}"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+}
+
+resource "aws_apigatewayv2_route" "put_trip" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "PUT /trips/{tripId}"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+}
+
+resource "aws_apigatewayv2_route" "delete_trip" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "DELETE /trips/{tripId}"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+}
+
 resource "aws_lambda_permission" "allow_apigw_trips" {
   statement_id  = "AllowAPIGatewayInvokeTrips"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.trips.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*/trips"
+  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*/trips*"
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -310,7 +334,154 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
+# --- Cognito Authentication ---
+module "cognito" {
+  source = "../modules/cognito"
+  
+  app_name    = "daylight"
+  environment = var.environment
+  
+  api_gateway_arn = aws_apigatewayv2_api.api.arn
+  user_pool_domain = "daylight-${var.environment}-${random_pet.suffix.id}"
+  
+  depends_on = [aws_apigatewayv2_api.api]
+}
+
+# Auth Lambda
+resource "aws_lambda_function" "auth" {
+  function_name    = "daylight_auth_${random_pet.suffix.id}"
+  role             = aws_iam_role.lambda.arn
+  handler          = "auth.handler"
+  runtime          = "nodejs20.x"
+  filename         = "${var.backend_zip_dir}/auth.zip"
+  source_code_hash = filebase64sha256("${var.backend_zip_dir}/auth.zip")
+  
+  environment {
+    variables = {
+      NODE_ENV = var.environment
+    }
+  }
+}
+
+# Auth Lambda permissions for SSM and Cognito
+resource "aws_iam_policy" "lambda_auth_permissions" {
+  name = "daylight_lambda_auth_${random_pet.suffix.id}"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ssm:GetParameter",
+          "cognito-idp:InitiateAuth",
+          "cognito-idp:RespondToAuthChallenge",
+          "cognito-idp:SignUp",
+          "cognito-idp:ConfirmSignUp",
+          "cognito-idp:ForgotPassword",
+          "cognito-idp:ConfirmForgotPassword",
+          "cognito-idp:ChangePassword",
+          "cognito-idp:UpdateUserAttributes",
+          "cognito-idp:GetUser",
+          "cognito-idp:GlobalSignOut"
+        ],
+        Resource = [
+          module.cognito.user_pool_arn,
+          "arn:aws:ssm:${var.region}:*:parameter/daylight/${var.environment}/cognito/config"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_auth_permissions" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.lambda_auth_permissions.arn
+}
+
+# Auth API Gateway integration
+resource "aws_apigatewayv2_integration" "auth" {
+  api_id                 = aws_apigatewayv2_api.api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.auth.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+# Auth routes
+resource "aws_apigatewayv2_route" "auth_login" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /auth/login"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_signup" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /auth/signup"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_confirm_signup" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /auth/confirm-signup"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_forgot_password" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /auth/forgot-password"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_reset_password" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /auth/reset-password"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_refresh" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /auth/refresh"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_logout" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /auth/logout"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_profile_get" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /auth/profile"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_profile_put" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "PUT /auth/profile"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_change_password" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "PUT /auth/change-password"
+  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+}
+
+# Auth Lambda permissions
+resource "aws_lambda_permission" "allow_apigw_auth" {
+  statement_id  = "AllowAPIGatewayInvokeAuth"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.auth.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*/auth/*"
+}
+
 # --- Outputs ---
 output "frontend_bucket" { value = aws_s3_bucket.frontend.bucket }
 output "cdn_domain"      { value = aws_cloudfront_distribution.cdn.domain_name }
 output "api_base_url"    { value = aws_apigatewayv2_api.api.api_endpoint }
+output "cognito_user_pool_id" { value = module.cognito.user_pool_id }
+output "cognito_user_pool_client_id" { value = module.cognito.user_pool_client_id }
+output "cognito_identity_pool_id" { value = module.cognito.identity_pool_id }
+output "cognito_user_pool_domain" { value = module.cognito.user_pool_domain }
