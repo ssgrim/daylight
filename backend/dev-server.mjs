@@ -2,9 +2,26 @@
 import http from 'http'
 import fs from 'node:fs'
 import path from 'node:path'
-import { handler as planHandler } from './dist/handlers/plan.js'
+import { createRequire } from 'module'
 import { initDb, queryHistory } from './src/lib/history.mjs'
 import { getSeasonFor } from './src/lib/season.mjs'
+
+// Import handlers for API endpoints
+let planHandler = null
+let tripsHandler = null
+
+try {
+  // These are CommonJS modules, use createRequire to import them
+  const require = createRequire(import.meta.url)
+  
+  const planModule = require('./dist/plan.js')
+  planHandler = planModule.handler
+  
+  const tripsModule = require('./dist/trips.js')
+  tripsHandler = tripsModule.handler
+} catch (err) {
+  console.warn('Could not load handlers:', err.message)
+}
 
 const PORT = process.env.PORT || 5174
 
@@ -66,7 +83,50 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-  if (req.url && req.url.startsWith('/plan')) {
+    if (req.url && req.url.startsWith('/api/trips')) {
+      if (!tripsHandler) {
+        res.writeHead(503, defaultCors)
+        res.end('Trips handler not available')
+        return
+      }
+
+      // Parse the URL to extract path and query parameters
+      const url = new URL(req.url, `http://localhost`)
+      const pathParts = url.pathname.split('/').filter(Boolean)
+      
+      // Construct Lambda-like event
+      let body = ''
+      if (req.method === 'POST' || req.method === 'PUT') {
+        await new Promise((resolve) => {
+          req.on('data', chunk => body += chunk)
+          req.on('end', resolve)
+        })
+      }
+
+      const event = {
+        httpMethod: req.method,
+        path: url.pathname,
+        pathParameters: pathParts.length > 2 ? { tripId: pathParts[2] } : null,
+        queryStringParameters: Object.fromEntries(url.searchParams.entries()),
+        headers: req.headers,
+        body: body || null
+      }
+
+      try {
+        const result = await tripsHandler(event)
+        const headers = Object.assign({}, defaultCors, result.headers || { 'content-type': 'application/json' })
+        res.writeHead(result.statusCode || 200, headers)
+        res.end(result.body)
+        return
+      } catch (error) {
+        console.error('Trips handler error:', error)
+        res.writeHead(500, defaultCors)
+        res.end(JSON.stringify({ error: error.message }))
+        return
+      }
+    }
+
+    if (req.url && req.url.startsWith('/plan')) {
       const url = new URL(req.url, `http://localhost`)
       const query = Object.fromEntries(url.searchParams.entries())
 

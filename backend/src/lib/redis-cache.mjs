@@ -1,19 +1,48 @@
 let redis = null
-try {
-  const IORedis = await import('ioredis')
-  redis = IORedis.default
-} catch (e) {
-  // optional dependency not installed
+
+async function loadRedis() {
+  if (redis === null) {
+    try {
+      const IORedis = await import('ioredis')
+      redis = IORedis.default
+    } catch (e) {
+      // optional dependency not installed
+      redis = false
+    }
+  }
+  return redis
 }
 
-export function createRedisCache() {
+export async function createRedisCache() {
   const url = process.env.REDIS_URL
-  if (!url || !redis) return null
-  const client = new redis(url)
+  const Redis = await loadRedis()
+  
+  if (!url || !Redis) return null
+  
+  const client = new Redis(url)
   return {
-    async get(key) { try { const v = await client.get(key); return v ? JSON.parse(v) : undefined } catch (e) { return undefined } },
-    async set(key, value, ttlMs = 60000) { try { await client.set(key, JSON.stringify(value), 'PX', ttlMs) } catch (e) { /* ignore */ } },
-    async clear() { try { await client.flushdb() } catch (e) { /* ignore */ } }
+    async get(key) { 
+      try { 
+        const v = await client.get(key) 
+        return v ? JSON.parse(v) : undefined 
+      } catch (e) { 
+        return undefined 
+      } 
+    },
+    async set(key, value, ttlMs = 60000) { 
+      try { 
+        await client.set(key, JSON.stringify(value), 'PX', ttlMs) 
+      } catch (e) { 
+        /* ignore */ 
+      } 
+    },
+    async clear() { 
+      try { 
+        await client.flushdb() 
+      } catch (e) { 
+        /* ignore */ 
+      } 
+    }
   }
 }
 

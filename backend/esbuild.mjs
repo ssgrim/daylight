@@ -5,14 +5,33 @@ import path from 'node:path'
 
 mkdirSync('dist', { recursive: true })
 
+// Build Lambda handlers as CommonJS for deployment
 await build({
-  entryPoints: ['src/handlers/trips.ts', 'src/handlers/plan.ts'],
+  entryPoints: [
+    'src/handlers/trips.ts', 
+    'src/handlers/plan.ts',
+    'src/handlers/health.ts'
+  ],
   outdir: 'dist',
   bundle: true,
   platform: 'node',
   target: 'node20',
   format: 'cjs',
   minify: true
+})
+
+// Build library modules as ES modules for testing
+await build({
+  entryPoints: [
+    'src/lib/validation.ts',
+    'src/lib/middleware.ts'
+  ],
+  outdir: 'dist/lib',
+  bundle: false,
+  platform: 'node', 
+  target: 'node20',
+  format: 'esm',
+  minify: false
 })
 
 function zipFile(srcFile, destZip) {
@@ -35,4 +54,5 @@ function zipFile(srcFile, destZip) {
 
 zipFile('dist/trips.js', 'dist/trips.zip')
 zipFile('dist/plan.js', 'dist/plan.zip')
+zipFile('dist/health.js', 'dist/health.zip')
 console.log('Built Lambda zips')
