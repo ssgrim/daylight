@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react'
 import Map from '../components/Map'
 import { t, useLocale } from '../i18n'
@@ -13,8 +12,8 @@ type Suggestion = {
   season?: { season: string; hemisphere: string }
   events?: { provider: string; events: Array<{ name: string; venue?: string; date?: string }> }
   traffic?: { provider: string; congestion?: number }
+}
 
-//
 export default function Plan() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -23,6 +22,8 @@ export default function Plan() {
   const [lngInput, setLngInput] = useState('-122.3321')
   const [showEvents, setShowEvents] = useState(true)
   const [showTraffic, setShowTraffic] = useState(true)
+  // Details panel state
+  const [selected, setSelected] = useState<Suggestion | null>(null)
 
   // Map state (must be after latInput/lngInput/suggestions)
   const [mapCenter, setMapCenter] = useState<[number, number]>([Number(latInput), Number(lngInput)])
@@ -168,43 +169,58 @@ export default function Plan() {
           </ul>
         </div>
       ) : (
-        <ul className="mt-4 space-y-3">
-          {suggestions.map((s) => (
-            <li key={s.id} className="p-3 border rounded">
-              <div className="flex items-center justify-between">
-                <div className="font-medium">{s.title} <span className="text-sm text-slate-500">({s.score})</span></div>
-                {s.season && (
-                  <div className={`px-2 py-0.5 rounded text-xs ${s.season.season === 'summer' ? 'bg-yellow-200 text-yellow-800' : s.season.season === 'winter' ? 'bg-sky-200 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>{s.season.season}</div>
-                )}
-              </div>
-              <div className="text-sm text-slate-600">{s.start} → {s.end}</div>
-              {s.reason && <div className="text-sm text-slate-500 mt-1">{s.reason}</div>}
-              {s.season && (
-                <div className="text-xs text-slate-400 mt-1">Season: {s.season.season} ({s.season.hemisphere})</div>
-              )}
-              {showEvents && s.events && s.events.events && (
-                <div className="mt-2 text-sm">
-                  <div className="font-semibold">{t('nearbyEvents')}</div>
-                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {s.events.events.map((e:any, idx:number) => (
-                      <div key={e.id || idx} className="flex gap-2 p-2 border rounded">
-                        {e.image ? <img src={e.image} alt={e.name} className="w-16 h-12 object-cover rounded" /> : <div className="w-16 h-12 bg-slate-100 rounded" />}
-                        <div>
-                          <div className="font-medium">{e.name}</div>
-                          <div className="text-xs text-slate-500">{e.venue} {e.date ? `· ${new Date(e.date).toLocaleString()}` : ''}</div>
-                          {e.url && <a className="text-xs text-sky-600" href={e.url} target="_blank" rel="noreferrer">{t('tickets')}</a>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+        <div className="flex gap-6">
+          <ul className="mt-4 space-y-3 flex-1">
+            {suggestions.map((s) => (
+              <li key={s.id} className={`p-3 border rounded cursor-pointer ${selected?.id === s.id ? 'bg-sky-50 border-sky-400' : ''}`} onClick={() => setSelected(s)}>
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{s.title} <span className="text-sm text-slate-500">({s.score})</span></div>
+                  {s.season && (
+                    <div className={`px-2 py-0.5 rounded text-xs ${s.season.season === 'summer' ? 'bg-yellow-200 text-yellow-800' : s.season.season === 'winter' ? 'bg-sky-200 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>{s.season.season}</div>
+                  )}
                 </div>
-              )}
-              {showTraffic && s.traffic && s.traffic.congestion != null && (
-                <div className="mt-2 text-sm">{t('traffic')}: <span className="font-semibold">{s.traffic.congestion}%</span></div>
-              )}
-            </li>
-          ))}
-        </ul>
+                <div className="text-sm text-slate-600">{s.start} → {s.end}</div>
+                {s.reason && <div className="text-sm text-slate-500 mt-1">{s.reason}</div>}
+                {s.season && (
+                  <div className="text-xs text-slate-400 mt-1">Season: {s.season.season} ({s.season.hemisphere})</div>
+                )}
+                {showEvents && s.events && s.events.events && (
+                  <div className="mt-2 text-sm">
+                    <div className="font-semibold">{t('nearbyEvents')}</div>
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {s.events.events.map((e:any, idx:number) => (
+                        <div key={e.id || idx} className="flex gap-2 p-2 border rounded">
+                          {e.image ? <img src={e.image} alt={e.name} className="w-16 h-12 object-cover rounded" /> : <div className="w-16 h-12 bg-slate-100 rounded" />}
+                          <div>
+                            <div className="font-medium">{e.name}</div>
+                            <div className="text-xs text-slate-500">{e.venue} {e.date ? `· ${new Date(e.date).toLocaleString()}` : ''}</div>
+                            {e.url && <a className="text-xs text-sky-600" href={e.url} target="_blank" rel="noreferrer">{t('tickets')}</a>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {showTraffic && s.traffic && s.traffic.congestion != null && (
+                  <div className="mt-2 text-sm">{t('traffic')}: <span className="font-semibold">{s.traffic.congestion}%</span></div>
+                )}
+              </li>
+            ))}
+          </ul>
+          {/* Details panel */}
+          <div className="w-96 min-h-[200px] border rounded p-4 bg-white shadow-sm mt-4" style={{ display: selected ? 'block' : 'none' }}>
+            {selected ? (
+              <>
+                <div className="font-bold text-lg mb-2">{selected.title}</div>
+                {/* TODO: Add photo, hours, phone, website, etc. here */}
+                <div className="text-sm text-slate-600 mb-2">{selected.start} → {selected.end}</div>
+                {selected.reason && <div className="text-sm text-slate-500 mb-2">{selected.reason}</div>}
+                {/* Placeholder for details */}
+                <div className="text-xs text-slate-400">Details panel coming soon...</div>
+              </>
+            ) : null}
+          </div>
+        </div>
       )}
     </div>
   )
