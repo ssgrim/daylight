@@ -1,0 +1,93 @@
+openapi: 3.0.3
+info:
+  title: Daylight API
+  version: 1.0.0
+  description: API for Daylight backend (plan, trips, etc)
+servers:
+  - url: https://api.example.com
+paths:
+  /plan:
+    get:
+      summary: Get a plan suggestion
+      parameters:
+        - in: query
+          name: lat
+          schema:
+            type: number
+          required: false
+          description: Latitude
+        - in: query
+          name: lng
+          schema:
+            type: number
+          required: false
+          description: Longitude
+      responses:
+        '200':
+          description: Plan suggestion(s)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanSuggestion'
+  /trips:
+    post:
+      summary: Create or update a trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripRequest'
+      responses:
+        '200':
+          description: Trip created/updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripResponse'
+components:
+  schemas:
+    PlanSuggestion:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        score:
+          type: number
+        reason:
+          type: string
+        season:
+          type: object
+          properties:
+            season:
+              type: string
+            hemisphere:
+              type: string
+        events:
+          type: object
+        traffic:
+          type: object
+    TripRequest:
+      type: object
+      properties:
+        tripId:
+          type: string
+        data:
+          type: object
+    TripResponse:
+      type: object
+      properties:
+        tripId:
+          type: string
+        status:
+          type: string
