@@ -1,5 +1,46 @@
 
 import { useEffect, useState } from 'react'
+import Map from '../components/Map'
+import { t, useLocale } from '../i18n'
+
+type Suggestion = {
+  id: string
+  title: string
+  start: string
+  end: string
+  score: number
+  reason?: string
+  season?: { season: string; hemisphere: string }
+  events?: { provider: string; events: Array<{ name: string; venue?: string; date?: string }> }
+  traffic?: { provider: string; congestion?: number }
+
+//
+export default function Plan() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [latInput, setLatInput] = useState('47.6062')
+  const [lngInput, setLngInput] = useState('-122.3321')
+  const [showEvents, setShowEvents] = useState(true)
+  const [showTraffic, setShowTraffic] = useState(true)
+
+  // Map state (must be after latInput/lngInput/suggestions)
+  const [mapCenter, setMapCenter] = useState<[number, number]>([Number(latInput), Number(lngInput)])
+  const [mapZoom, setMapZoom] = useState(10)
+  const [mapBounds, setMapBounds] = useState<[[number, number], [number, number]] | null>(null)
+
+  // Update map center when lat/lng input changes
+  useEffect(() => {
+    setMapCenter([Number(latInput), Number(lngInput)])
+  }, [latInput, lngInput])
+
+  // Markers for map (one per suggestion, using suggestion location if available)
+  const markers = suggestions.map((s) => ({
+    id: s.id,
+    lat: Number(latInput),
+    lng: Number(lngInput),
+    label: s.title
+  }))
 import { t, useLocale } from '../i18n'
 
 type Suggestion = {
@@ -73,6 +114,21 @@ export default function Plan() {
   const { locale, setLocale } = useLocale()
   return (
     <div className="p-6">
+      <div className="my-6">
+        <Map
+          center={mapCenter}
+          zoom={mapZoom}
+          markers={markers}
+          onViewportChange={(center, zoom, bounds) => {
+            setMapCenter(center)
+            setMapZoom(zoom)
+            setMapBounds(bounds)
+          }}
+        />
+        {mapBounds && (
+          <div className="text-xs text-slate-500 mt-1">Viewport: [{mapBounds[0][0].toFixed(4)}, {mapBounds[0][1].toFixed(4)}] - [{mapBounds[1][0].toFixed(4)}, {mapBounds[1][1].toFixed(4)}]</div>
+        )}
+      </div>
       <div className="flex justify-end mb-2">
         <label className="mr-2">Lang:</label>
         <select value={locale} onChange={e => setLocale(e.target.value)} className="border rounded px-2 py-1">
