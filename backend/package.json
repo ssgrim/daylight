@@ -6,7 +6,10 @@
   "scripts": {
     "build": "node esbuild.mjs",
     "test": "node --test",
-    "dev": "node ./dev-server.mjs"
+    "dev": "node ./dev-server.mjs",
+    "migrate": "node migrate-database.js",
+    "db:migrate": "node migrate-database.js",
+    "db:status": "node -e \"import('./src/lib/databaseService.js').then(({getDatabaseStatus}) => getDatabaseStatus().then(console.log))\""
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.640.0",
