@@ -4,25 +4,39 @@ Cloud-first trip planning and live re-planning engine.
 
 ## Documentation
 
-For the full implementation plan and architecture details, see:
+For comprehensive project documentation:
 
-- [Daylight v1 Implementation Pack (AWS, React, Vite, Terraform, CI)](docs/daylight_v_1_implementation_pack_aws_react_vite_terraform_ci.md)
+- **Implementation Guide**: [Daylight v1 Implementation Pack](docs/daylight_v_1_implementation_pack_aws_react_vite_terraform_ci.md) - Complete AWS, React, Vite, Terraform, CI setup
+- **Caching Strategy**: [Cache Implementation](docs/CACHING_IMPLEMENTATION.md) - Redis/ElastiCache with cache-aside pattern and metrics
+- **Production Readiness**: [Production Checklist](docs/PRODUCTION_READINESS.md) - Deployment and operational considerations
+- **Competitive Analysis**: [Market Analysis](docs/market-analysis.md) - Feature comparison vs industry leaders
+- **Strategic Roadmap**: [Roadmap Summary](docs/roadmap-issues-summary.md) - Comprehensive feature planning and GitHub issues
+- **Development Setup**: [Development Guide](docs/DEVELOPMENT_SETUP.md) - Local development environment setup
+- **Testing Strategy**: [Testing Guide](docs/testing-strategy.md) - Comprehensive testing approach
+
+### OpenAPI Specification
+
+- [Daylight API v1](docs/openapi/daylight.v1.yaml) - Complete API specification
 
 
-## Status (quick)
+## Status (Current Implementation)
 
-- Shared types: done — `shared/src/types/daylight.ts` contains OpenAPI-aligned TS types (Trip, Anchor, PlanRequest/Response, Prefs).
-- Backend: minimal handlers implemented for `/plan` and `/trips` at `backend/src/handlers` (demo responses). Build and test scripts present in `backend/package.json`.
-- Frontend: basic React/Vite scaffold and pages (`Root`, `Plan`) are present and buildable via `frontend/package.json`.
-- Infra: Terraform configs exist under `infra/terraform` but full AWS wiring and deploy secrets are left to the operator.
-- CI/Deploy: GitHub Actions manifests are documented in this README; deploy steps expect workspace packages `shared`, `backend`, and `frontend` (some workspaces may need `shared/package.json` added/updated).
+✅ **Completed Features:**
+- **Shared types**: Complete TypeScript types aligned with OpenAPI specification
+- **Backend**: Enhanced handlers with external API integrations (weather, events, traffic, geocoding)
+- **Caching Layer**: Comprehensive Redis/ElastiCache implementation with cache-aside pattern and metrics
+- **Monitoring**: Prometheus metrics integration with admin endpoints
+- **Frontend**: React/Vite scaffold with basic trip planning interface
+- **Infrastructure**: Complete Terraform configuration for AWS deployment
+- **CI/CD**: GitHub Actions with security scanning and automated deployments
 
-What's left (short):
+🚧 **In Progress/Remaining Work:**
+- **Full Trip Persistence**: Complete DynamoDB CRUD implementation for trips handler
+- **Advanced Planning Engine**: Enhanced solver with time windows and optimization algorithms
+- **User Authentication**: Cognito integration with RBAC (tracked in issue #121)
+- **Enhanced Discovery**: Additional API integrations for comprehensive location data (issue #122)
 
-- Wire end-to-end persistence: connect `backend/handlers/trips.ts` to DynamoDB and implement full CRUD with proper keys and tests.
-- Improve the planner: replace demo `/plan` handler with the scoring engine (backend/lib/engine.ts) and unit tests.
-- Frontend: implement planner UI, map integration, and API wiring (auth, token management) in the SPA.
-- Infra: finish Terraform wiring for Lambdas, API Gateway, DynamoDB, and CI secrets; add RBAC/Cognito for production.
+📋 **Planned Features**: 30+ features tracked in GitHub issues #91-127, including social features, offline capabilities, advanced search, and mobile optimization.
 
 Local dev (frontend + backend)
 
@@ -43,13 +57,42 @@ npm run dev -- --port 5173
 
 Open the forwarded Codespaces preview for port 5173. The Plan page has sample buttons that call `/plan?lat=...&lng=...` and show enriched results.
 
-Config & observability notes
+## Configuration & Environment Variables
 
-- To switch providers set environment variables for the backend (dev or deployed):
-  - `GEOCODE_PROVIDER` (default: `nominatim`) — other options: `mapbox` (requires `MAPBOX_TOKEN`)
-  - `WEATHER_PROVIDER` (default: `open-meteo`) — other options: `openweathermap` (requires `OPENWEATHERMAP_KEY`)
-- The dev adapters use an in-memory LRU cache for reverse geocoding to reduce quota usage.
-- The dev shim appends a small audit log to `backend/external_history.log` for calls to external providers (dev-only). For production, wire logs to CloudWatch/Datadog.
+### Backend Configuration
+
+**External API Providers:**
+- `GEOCODE_PROVIDER` (default: `nominatim`) — options: `mapbox` (requires `MAPBOX_TOKEN`)
+- `WEATHER_PROVIDER` (default: `open-meteo`) — options: `openweathermap` (requires `OPENWEATHERMAP_KEY`)
+
+**Caching Configuration:**
+- `REDIS_URL` — Redis connection string for distributed caching (optional, falls back to in-memory)
+- `GEOCODE_TTL_MS` — Cache TTL for geocoding results (default: 24 hours)
+- `WEATHER_TTL_MS` — Cache TTL for weather data (default: 30 minutes)
+- `EVENTS_TTL_MS` — Cache TTL for events data (default: 1 hour)
+- `TRAFFIC_TTL_MS` — Cache TTL for traffic data (default: 5 minutes)
+
+**Monitoring & Admin:**
+- `CACHE_ADMIN_TOKEN` — Simple token for cache admin endpoint access
+- `CACHE_ADMIN_JWT_SECRET` — JWT secret for secure admin endpoint access
+
+**Database:**
+- `TRIPS_TABLE` — DynamoDB table name for trip storage (injected by Terraform)
+
+### Frontend Configuration
+
+- `VITE_API_BASE` — Backend API base URL
+- `VITE_MAPBOX_TOKEN` — Mapbox access token for map functionality (optional)
+
+### Observability
+
+The application includes comprehensive monitoring:
+- **Metrics**: Prometheus metrics available at `/__metrics` endpoint
+- **Cache Analytics**: Cache hit/miss ratios and performance metrics at `/__cache` endpoint
+- **Audit Logging**: External API call history (development only)
+- **Real-time Monitoring**: AWS CloudWatch integration for production deployments
+
+For production deployments, see the [Production Readiness Guide](docs/PRODUCTION_READINESS.md).
 
 External integrations:
 
@@ -235,44 +278,34 @@ See `infra/README.md`.
 
 ---
 
-## 10) Migration notes (if OpenAPI or schema differs)
+## 10) Documentation & Roadmap
 
-- **Change in Trip item shape**: Update `shared/src/types/daylight.ts` and `backend/src/handlers/trips.ts` merge logic. No DDB migration needed if keys unchanged. If keys change, export table to S3, transform, re‑import; or add new attributes lazily on read.
-- **Add GSI**: If listing trips by owner is required, add `ownerId` attribute and GSI `gsi1pk = OWNER#<ownerId>`.
-- **Split itinerary items**: Introduce items `pk=TRIP#<id>`, `sk=ITIN#<ordinal>`; add `query` permissions and pagination.
-- **Auth**: Introduce Cognito User Pool + authorizer on API routes; change Terraform to attach `authorizer_id` to routes; add ID token fetch on frontend.
+For comprehensive project documentation and strategic roadmap:
 
----
+- **Implementation Guides**: See `docs/` directory for detailed documentation including caching implementation, production readiness checklist, and testing strategy
+- **Market Analysis**: Review `docs/market-analysis.md` for competitive positioning vs industry leaders
+- **Strategic Roadmap**: See `docs/roadmap-issues-summary.md` for comprehensive feature planning and GitHub issues summary
+- **GitHub Issues**: Track 30+ feature enhancements and infrastructure improvements via GitHub issues #91-120+
 
-## 11) Commit plan (messages & PR blurbs)
+### Current Implementation Status
 
-1. **feat(shared): add Daylight core types aligned to OpenAPI**
-   - Adds canonical TS types for Trip, Anchor, PlanRequest/Response, Preferences.
+The project includes:
+- ✅ Comprehensive Redis/ElastiCache caching with cache-aside pattern
+- ✅ External API integrations (weather, events, traffic, geocoding) with metrics
+- ✅ Prometheus monitoring and admin endpoints
+- ✅ Basic trip planning engine and handlers
+- ✅ React/Vite frontend scaffold with map integration
+- ✅ AWS infrastructure via Terraform (Lambda, API Gateway, DynamoDB, CloudFront)
+- ✅ GitHub Actions CI/CD with security scanning
 
-2. **feat(backend): scoring engine + /plan handler**
-   - Implements rolling‑horizon heuristic and suggestion rationales; unit tests.
+### Outstanding Development Work
 
-3. **feat(backend): /trips CRUD with DynamoDB**
-   - Adds Trip persistence (PK=TRIP#id, SK=META); tests with mocked DDB.
+Major features and infrastructure improvements are tracked in GitHub issues. Key areas include:
+- User authentication and social features
+- Enhanced trip planning with multi-day support
+- Real-time collaboration and sharing
+- Advanced search and discovery
+- Offline functionality and mobile optimization
 
-4. **feat(frontend): React/Vite app with Map view & panels**
-   - PWA‑ready scaffold, Zustand store, Mapbox/Maplibre fallback; re‑solve control.
-
-5. **infra(terraform): API Gateway, Lambda, DynamoDB, S3+CloudFront**
-   - Least‑privilege IAM, OAC for SPA bucket, HTTP API routes.
-
-6. **ci: add CI and gated deploy workflows**
-   - Lint/test/build on PR; deploy to AWS on main when secrets exist.
-
-7. **docs: root README and infra README**
-   - Setup, env, deploy, and migration notes.
-
----
-
-## 12) Next steps 
-- Cognito + RBAC (viewer/editor/owner) with API authorizers.
-- Candidate discovery integrations (Places, NPS, weather, AQI, wildfire alerts) via separate Lambdas.
-- Solver improvements (time‑windows, OR‑Tools or metaheuristics).
-- Offline map regions & background sync; web push for re‑plan suggestions.
-- Budget guardrails & printable/shareable trip cards.
+See GitHub issues for detailed implementation plans and acceptance criteria.
 
