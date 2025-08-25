@@ -1,5 +1,10 @@
 # Caching (Redis / in-process)
 
+> **📋 Complete Documentation**
+> - **[Implementation Summary](./CACHING_IMPLEMENTATION.md)** - Full feature overview and acceptance criteria
+> - **[Production Readiness](./PRODUCTION_READINESS.md)** - Deployment checklist and monitoring setup
+> - **[CodeQL Issue Template](./CODEQL_ISSUE_TEMPLATE.md)** - CI configuration help
+
 This project supports a distributed cache (Redis / ElastiCache) and an in-process memory fallback.
 
 Key points
