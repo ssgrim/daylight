@@ -53,23 +53,60 @@ function appendHistory(entry) {
   try { fs.appendFileSync(HISTORY_FILE, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n') } catch (e) { /* ignore */ }
 }
 
-/** @param {number} lat @param {number} lng */
-export async function fetchWeather(lat, lng) {
-  // provider switchable via env; default: open-meteo
-  const provider = process.env.WEATHER_PROVIDER || 'open-meteo'
-  if (provider === 'open-meteo') {
+
+// --- Provider Abstraction Layer ---
+const weatherProviders = {
+  'open-meteo': async (lat, lng) => {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&current_weather=true&timezone=UTC`
     const raw = await retry(() => timeoutFetch(url, { method: 'GET' }, 2500), 2, 300)
     if (!raw.ok) throw new Error(`weather fetch failed: ${raw.status}`)
     const body = await raw.json()
     const cw = body.current_weather || {}
     const summary = cw.temperature != null ? `Temp ${cw.temperature}°C, wind ${cw.windspeed} km/h` : undefined
-  const season = getSeasonFor(lat, new Date())
-  appendHistory({ type: 'weather', provider, lat, lng, ok: true, season })
-  return { temperatureC: cw.temperature, windSpeedKph: cw.windspeed, weatherCode: cw.weathercode, summary, season }
+    const season = getSeasonFor(lat, new Date())
+    appendHistory({ type: 'weather', provider: 'open-meteo', lat, lng, ok: true, season })
+    return { temperatureC: cw.temperature, windSpeedKph: cw.windspeed, weatherCode: cw.weathercode, summary, season }
+  },
+  // Add more providers here
+}
+
+const eventsProviders = {
+  'default': async (lat, lng) => fetchLocalEvents(lat, lng),
+  // Add more providers here
+}
+
+const trafficProviders = {
+  'default': async (lat, lng) => fetchTraffic(lat, lng),
+  // Add more providers here
+}
+
+export async function fetchWeather(lat, lng) {
+  const provider = process.env.WEATHER_PROVIDER || 'open-meteo'
+  const fn = weatherProviders[provider]
+  if (!fn) throw new Error('unsupported weather provider: ' + provider)
+  return fn(lat, lng)
+}
+
+export async function fetchEvents(lat, lng) {
+  const provider = process.env.EVENTS_PROVIDER || 'default'
+  const fn = eventsProviders[provider]
+  if (!fn) throw new Error('unsupported events provider: ' + provider)
+  try {
+    return await fn(lat, lng)
+  } catch (e) {
+    return { provider: 'error', events: [], error: String(e) }
   }
-  // placeholder for other providers (openweathermap, etc.)
-  throw new Error('unsupported weather provider')
+}
+
+export async function fetchTrafficInfo(lat, lng) {
+  const provider = process.env.TRAFFIC_PROVIDER || 'default'
+  const fn = trafficProviders[provider]
+  if (!fn) throw new Error('unsupported traffic provider: ' + provider)
+  try {
+    return await fn(lat, lng)
+  } catch (e) {
+    return { provider: 'error', congestion: null, error: String(e) }
+  }
 }
 
 export async function fetchEvents(lat, lng) {
