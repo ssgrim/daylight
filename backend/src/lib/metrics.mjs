@@ -1,6 +1,6 @@
 import client from 'prom-client'
 
-const register = new client.Registry()
+export const register = new client.Registry()
 client.collectDefaultMetrics({ register })
 
 // Expose a function to publish cache metrics from external.getCacheMetrics()

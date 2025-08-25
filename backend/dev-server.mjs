@@ -201,12 +201,21 @@ const server = http.createServer(async (req, res) => {
     // Prometheus metrics endpoint
     if (req.url && req.url === '/__metrics') {
       try {
-        const metrics = await import('./src/lib/metrics.mjs')
-        const { getCacheMetrics } = await import('./src/lib/external.js')
-        // update cache-related gauges
-        await metrics.publishCacheMetrics(getCacheMetrics)
-        const body = await metrics.register.metrics()
-        res.writeHead(200, { 'Content-Type': metrics.register.contentType })
+  const { publishCacheMetrics, register } = await import('./src/lib/metrics.mjs')
+        // external.js may not exist in test environments (no build step). Try to
+        // load getCacheMetrics, but fall back to a noop that returns empty metrics
+        // so the Prometheus endpoint still responds with text.
+        let getCacheMetrics = () => ({})
+        try {
+          const ext = await import('./src/lib/external.js')
+          if (ext && typeof ext.getCacheMetrics === 'function') getCacheMetrics = ext.getCacheMetrics
+        } catch (e) {
+          // ignore missing module; metrics will be empty
+        }
+        // update cache-related gauges (noop if unavailable)
+  await publishCacheMetrics(getCacheMetrics)
+  const body = await register.metrics()
+  res.writeHead(200, { 'Content-Type': register.contentType })
         res.end(body)
         return
       } catch (e) {
