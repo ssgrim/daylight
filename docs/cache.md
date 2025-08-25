@@ -37,6 +37,10 @@ You can require a token to access `/__cache` by setting the `CACHE_ADMIN_TOKEN` 
 
 This is a lightweight guard for development; for production use a stronger auth mechanism.
 
+JWT admin tokens
+
+You can also secure the admin endpoint with JWTs by setting `CACHE_ADMIN_JWT_SECRET`. Requests to `/__cache` must include a Bearer token signed with this secret. This allows you to use short-lived tokens issued by your auth system.
+
 Metrics
 
 Each cache object exposes a `metrics()` method (hits/misses/sets/invalidations). The aggregated `getCacheMetrics()` helper is available from `backend/src/lib/external.ts` for integration with monitoring.

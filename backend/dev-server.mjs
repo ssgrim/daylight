@@ -133,16 +133,31 @@ const server = http.createServer(async (req, res) => {
       try {
         const { getCacheMetrics, invalidateCacheFor, clearAllCaches } = await import('./src/lib/external.js')
         // Optional admin token guard. If CACHE_ADMIN_TOKEN is set, require a matching token in
-        // Authorization: Bearer <token> or X-Admin-Token header.
+        // Authorization: Bearer <token> or X-Admin-Token header. Alternatively, if
+        // CACHE_ADMIN_JWT_SECRET is set, validate a JWT signed with that secret.
         const adminToken = process.env.CACHE_ADMIN_TOKEN
-        if (adminToken) {
+        const adminJwtSecret = process.env.CACHE_ADMIN_JWT_SECRET
+        if (adminToken || adminJwtSecret) {
           const authHeader = (req.headers['authorization'] || req.headers['x-admin-token'] || '')
           let token = ''
           if (typeof authHeader === 'string') {
             if (authHeader.toLowerCase().startsWith('bearer ')) token = authHeader.slice(7).trim()
             else token = authHeader.trim()
           }
-          if (token !== adminToken) {
+          if (adminToken && token === adminToken) {
+            // ok
+          } else if (adminJwtSecret && token) {
+            try {
+              // lazy import jsonwebtoken to avoid startup deps in dev
+              const jwt = await import('jsonwebtoken')
+              const verified = jwt.verify(token, adminJwtSecret)
+              // allow any valid token; optionally check claims here
+            } catch (e) {
+              res.writeHead(401, defaultCors)
+              res.end('Unauthorized')
+              return
+            }
+          } else {
             res.writeHead(401, defaultCors)
             res.end('Unauthorized')
             return
