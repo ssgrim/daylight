@@ -3,12 +3,19 @@
 
 import fs from 'fs'
 import path from 'path'
+// @ts-ignore
 import LRU from './lru.mjs'
+// @ts-ignore
 import { info, warn, error } from './logger.mjs'
+// @ts-ignore
 import { getSeasonFor } from './season.mjs'
+// @ts-ignore
 import { initDb, appendDb } from './history.mjs'
+// @ts-ignore
 import { getSecretValue } from './secrets.mjs'
+// @ts-ignore
 import { fetchLocalEvents, getEventsCacheMetrics } from './events.mjs'
+// @ts-ignore
 import { fetchTraffic, getTrafficCacheMetrics } from './traffic.mjs'
 // Expose cache metrics for monitoring
 export function getCacheMetrics() {
@@ -20,15 +27,13 @@ export function getCacheMetrics() {
 
 const geocodeCache = LRU(500)
 const HISTORY_FILE = path.resolve(process.cwd(), 'backend', 'external_history.log')
-let dbPromise = null
+let dbPromise: any = null
 try { dbPromise = initDb() } catch (e) { dbPromise = null }
 
 /**
- * @param {string} url
- * @param {RequestInit} [opts]
- * @param {number} [ms]
+ * Fetch with timeout and abort controller
  */
-function timeoutFetch(url, opts = {}, ms = 3000) {
+function timeoutFetch(url: string, opts: any = {}, ms: number = 3000) {
   const controller = new AbortController()
   const id = setTimeout(() => controller.abort(), ms)
   // @ts-ignore fetch is available in Node 18+ in this dev environment
@@ -36,11 +41,9 @@ function timeoutFetch(url, opts = {}, ms = 3000) {
 }
 
 /**
- * @param {() => Promise<any>} fn
- * @param {number} [attempts]
- * @param {number} [delayMs]
+ * Retry function with exponential backoff
  */
-async function retry(fn, attempts = 2, delayMs = 300) {
+async function retry(fn: () => Promise<any>, attempts: number = 2, delayMs: number = 300) {
   let lastErr = null
   for (let i = 0; i < attempts; i++) {
     try { return await fn() } catch (e) { lastErr = e; await new Promise(r => setTimeout(r, delayMs)) }
@@ -48,15 +51,15 @@ async function retry(fn, attempts = 2, delayMs = 300) {
   throw lastErr
 }
 
-/** @param {any} entry */
-function appendHistory(entry) {
+/** Append entry to history file */
+function appendHistory(entry: any) {
   try { fs.appendFileSync(HISTORY_FILE, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n') } catch (e) { /* ignore */ }
 }
 
 
 // --- Provider Abstraction Layer ---
 const weatherProviders = {
-  'open-meteo': async (lat, lng) => {
+  'open-meteo': async (lat: number, lng: number) => {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&current_weather=true&timezone=UTC`
     const raw = await retry(() => timeoutFetch(url, { method: 'GET' }, 2500), 2, 300)
     if (!raw.ok) throw new Error(`weather fetch failed: ${raw.status}`)
@@ -71,25 +74,25 @@ const weatherProviders = {
 }
 
 const eventsProviders = {
-  'default': async (lat, lng) => fetchLocalEvents(lat, lng),
+  'default': async (lat: number, lng: number) => fetchLocalEvents(lat, lng),
   // Add more providers here
 }
 
 const trafficProviders = {
-  'default': async (lat, lng) => fetchTraffic(lat, lng),
+  'default': async (lat: number, lng: number) => fetchTraffic(lat, lng),
   // Add more providers here
 }
 
-export async function fetchWeather(lat, lng) {
+export async function fetchWeather(lat: number, lng: number) {
   const provider = process.env.WEATHER_PROVIDER || 'open-meteo'
-  const fn = weatherProviders[provider]
+  const fn = weatherProviders[provider as keyof typeof weatherProviders]
   if (!fn) throw new Error('unsupported weather provider: ' + provider)
   return fn(lat, lng)
 }
 
-export async function fetchEvents(lat, lng) {
+export async function fetchEvents(lat: number, lng: number) {
   const provider = process.env.EVENTS_PROVIDER || 'default'
-  const fn = eventsProviders[provider]
+  const fn = eventsProviders[provider as keyof typeof eventsProviders]
   if (!fn) throw new Error('unsupported events provider: ' + provider)
   try {
     return await fn(lat, lng)
@@ -98,9 +101,9 @@ export async function fetchEvents(lat, lng) {
   }
 }
 
-export async function fetchTrafficInfo(lat, lng) {
+export async function fetchTrafficInfo(lat: number, lng: number) {
   const provider = process.env.TRAFFIC_PROVIDER || 'default'
-  const fn = trafficProviders[provider]
+  const fn = trafficProviders[provider as keyof typeof trafficProviders]
   if (!fn) throw new Error('unsupported traffic provider: ' + provider)
   try {
     return await fn(lat, lng)
@@ -109,24 +112,8 @@ export async function fetchTrafficInfo(lat, lng) {
   }
 }
 
-export async function fetchEvents(lat, lng) {
-  try {
-    return await fetchLocalEvents(lat, lng)
-  } catch (e) {
-    return { provider: 'error', events: [], error: String(e) }
-  }
-}
-
-export async function fetchTrafficInfo(lat, lng) {
-  try {
-    return await fetchTraffic(lat, lng)
-  } catch (e) {
-    return { provider: 'error', congestion: null, error: String(e) }
-  }
-}
-
 /** @param {number} lat @param {number} lng */
-export async function reverseGeocode(lat, lng) {
+export async function reverseGeocode(lat: number, lng: number) {
   const key = `${lat},${lng}`
   const cached = geocodeCache.get(key)
   if (cached) return cached

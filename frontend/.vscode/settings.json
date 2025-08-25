@@ -1,0 +1,8 @@
+{
+  "typescript.preferences.useAliasesForRenames": false,
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.preferences.includePackageJsonAutoImports": "auto",
+  "typescript.suggest.autoImports": true,
+  "typescript.preferences.generateReturnInDocTemplate": true
+}

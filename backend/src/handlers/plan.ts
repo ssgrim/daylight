@@ -1,6 +1,8 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
 import { fetchWeather, reverseGeocode, fetchEvents, fetchTrafficInfo } from '../lib/external'
+// @ts-ignore
 import { info, error } from '../lib/logger.mjs'
+// @ts-ignore
 import { capturePromise } from '../lib/xray.mjs'
 
 
@@ -41,7 +43,24 @@ async function planHandler(event: any) {
       statusCode: 200,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify([
-        { id: '1', title: 'Live Stop', start: now, end: now, score: baseScore, reason, season, events, traffic }
+        {
+          id: '1',
+          title: 'Live Stop',
+          start: now,
+          end: now,
+          score: baseScore,
+          reason,
+          season,
+          events,
+          traffic,
+          distanceKm: 2.3, // mock value
+          openNow: true, // mock value
+          rank: 1,
+          photo: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80',
+          hours: '8:00 AM - 8:00 PM',
+          phone: '+1 555-123-4567',
+          website: 'https://example.com'
+        }
       ])
     }
   } catch (err: any) {

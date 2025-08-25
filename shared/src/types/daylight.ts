@@ -38,6 +38,16 @@ export interface Suggestion {
   end: string;   // ISO date-time
   score: number;
   reason?: string;
+  distanceKm?: number;
+  openNow?: boolean;
+  rank?: number;
+  photo?: string | null;
+  hours?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  season?: { season: string; hemisphere: string };
+  events?: { provider: string; events: Array<{ name: string; venue?: string; date?: string; id?: string; image?: string; url?: string }> };
+  traffic?: { provider: string; congestion?: number };
 }
 
 export type PlanResponse = Suggestion[];

@@ -1,18 +1,7 @@
 import { useEffect, useState } from 'react'
 import Map from '../components/Map'
-import { t, useLocale } from '../i18n'
-
-type Suggestion = {
-  id: string
-  title: string
-  start: string
-  end: string
-  score: number
-  reason?: string
-  season?: { season: string; hemisphere: string }
-  events?: { provider: string; events: Array<{ name: string; venue?: string; date?: string }> }
-  traffic?: { provider: string; congestion?: number }
-}
+import type { Suggestion } from '../../../shared/src/types/daylight'
+import { t, useLocale, type Locale } from '../i18n'
 
 export default function Plan() {
   const [loading, setLoading] = useState(true)
@@ -42,28 +31,6 @@ export default function Plan() {
     lng: Number(lngInput),
     label: s.title
   }))
-import { t, useLocale } from '../i18n'
-
-type Suggestion = {
-  id: string
-  title: string
-  start: string
-  end: string
-  score: number
-  reason?: string
-  season?: { season: string; hemisphere: string }
-  events?: { provider: string; events: Array<{ name: string; venue?: string; date?: string }> }
-  traffic?: { provider: string; congestion?: number }
-}
-
-export default function Plan() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
-  const [latInput, setLatInput] = useState('47.6062')
-  const [lngInput, setLngInput] = useState('-122.3321')
-  const [showEvents, setShowEvents] = useState(true)
-  const [showTraffic, setShowTraffic] = useState(true)
 
   useEffect(() => {
   const base = (import.meta as any).env?.VITE_API_BASE || ''
@@ -132,7 +99,7 @@ export default function Plan() {
       </div>
       <div className="flex justify-end mb-2">
         <label className="mr-2">Lang:</label>
-        <select value={locale} onChange={e => setLocale(e.target.value)} className="border rounded px-2 py-1">
+        <select value={locale} onChange={e => setLocale(e.target.value as Locale)} className="border rounded px-2 py-1">
           <option value="en">EN</option>
           <option value="es">ES</option>
         </select>
@@ -212,11 +179,21 @@ export default function Plan() {
             {selected ? (
               <>
                 <div className="font-bold text-lg mb-2">{selected.title}</div>
-                {/* TODO: Add photo, hours, phone, website, etc. here */}
+                {selected.photo && (
+                  <img src={selected.photo} alt={selected.title} className="w-full h-40 object-cover rounded mb-2" />
+                )}
+                <div className="flex flex-wrap gap-2 mb-2 text-xs">
+                  {selected.rank && <span className="bg-sky-100 text-sky-700 px-2 py-0.5 rounded">Rank #{selected.rank}</span>}
+                  {selected.distanceKm != null && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded">{selected.distanceKm.toFixed(1)} km</span>}
+                  {selected.openNow != null && (
+                    <span className={`px-2 py-0.5 rounded ${selected.openNow ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{selected.openNow ? 'Open now' : 'Closed'}</span>
+                  )}
+                </div>
                 <div className="text-sm text-slate-600 mb-2">{selected.start} → {selected.end}</div>
+                {selected.hours && <div className="text-sm text-slate-500 mb-1">Hours: {selected.hours}</div>}
+                {selected.phone && <div className="text-sm text-slate-500 mb-1">Phone: <a href={`tel:${selected.phone}`} className="text-sky-700 underline">{selected.phone}</a></div>}
+                {selected.website && <div className="text-sm text-slate-500 mb-1">Website: <a href={selected.website} className="text-sky-700 underline" target="_blank" rel="noreferrer">{selected.website}</a></div>}
                 {selected.reason && <div className="text-sm text-slate-500 mb-2">{selected.reason}</div>}
-                {/* Placeholder for details */}
-                <div className="text-xs text-slate-400">Details panel coming soon...</div>
               </>
             ) : null}
           </div>

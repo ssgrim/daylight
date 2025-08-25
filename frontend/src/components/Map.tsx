@@ -19,12 +19,12 @@ export default function Map({ center, zoom, markers, onViewportChange }: MapProp
     let clusterLayer: any
     let supercluster: any
     let loaded = false
-    let bounds: [[number, number], [number, number]] = [[0,0],[0,0]]
+    let bounds = [[-90, -180], [90, 180]] as [[number, number], [number, number]]
 
     (async () => {
       mapboxgl = (await import('mapbox-gl')).default
       supercluster = (await import('supercluster')).default
-      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN
+      mapboxgl.accessToken = (import.meta as any).env.VITE_MAPBOX_TOKEN
       map = new mapboxgl.Map({
         container: mapRef.current!,
         style: 'mapbox://styles/mapbox/streets-v11',
@@ -44,7 +44,14 @@ export default function Map({ center, zoom, markers, onViewportChange }: MapProp
         const points = markers.map(m => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [m.lng, m.lat] }, properties: { id: m.id, label: m.label } }))
         const cluster = new supercluster({ radius: 40, maxZoom: 16 })
         cluster.load(points)
-        const clusters = cluster.getClusters([bounds[0][1], bounds[0][0], bounds[1][1], bounds[1][0]], Math.round(map.getZoom()))
+        const mapBounds = map.getBounds()
+        const bbox: [number, number, number, number] = [
+          mapBounds.getSouthWest().lng,
+          mapBounds.getSouthWest().lat,
+          mapBounds.getNorthEast().lng,
+          mapBounds.getNorthEast().lat
+        ]
+        const clusters = cluster.getClusters(bbox, Math.round(map.getZoom()))
         clusters.forEach((c: any) => {
           if (c.properties.cluster) {
             // Cluster marker

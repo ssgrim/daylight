@@ -29,9 +29,10 @@
     "suncalc": "^1.9.0"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.137",
-    "@types/node": "^20.4.2",
+    "@types/aws-lambda": "^8.10.152",
+    "@types/node": "^20.19.11",
+    "@types/suncalc": "^1.9.2",
     "esbuild": "^0.23.1",
-    "typescript": "^5.6.2"
+    "typescript": "^5.9.2"
   }
 }
