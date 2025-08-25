@@ -17,12 +17,6 @@ import { getSecretValue } from './secrets.mjs'
 import { fetchLocalEvents, getEventsCacheMetrics } from './events.mjs'
 // @ts-ignore
 import { fetchTraffic, getTrafficCacheMetrics } from './traffic.mjs'
-import { 
-  weatherCircuitBreaker, 
-  geocodeCircuitBreaker, 
-  eventsCircuitBreaker, 
-  trafficCircuitBreaker 
-} from './circuit-breaker'
 // Expose cache metrics for monitoring
 export function getCacheMetrics() {
   return {
@@ -93,53 +87,29 @@ export async function fetchWeather(lat: number, lng: number) {
   const provider = process.env.WEATHER_PROVIDER || 'open-meteo'
   const fn = weatherProviders[provider as keyof typeof weatherProviders]
   if (!fn) throw new Error('unsupported weather provider: ' + provider)
-  
-  return await weatherCircuitBreaker.execute(
-    () => fn(lat, lng),
-    () => ({
-      temperatureC: 20,
-      windSpeedKph: 10,
-      weatherCode: 0,
-      summary: 'Weather data unavailable',
-      season: getSeasonFor(lat, new Date())
-    })
-  )
+  return fn(lat, lng)
 }
 
 export async function fetchEvents(lat: number, lng: number) {
   const provider = process.env.EVENTS_PROVIDER || 'default'
   const fn = eventsProviders[provider as keyof typeof eventsProviders]
   if (!fn) throw new Error('unsupported events provider: ' + provider)
-  
-  return await eventsCircuitBreaker.execute(
-    async () => {
-      try {
-        return await fn(lat, lng)
-      } catch (e) {
-        error('Events fetch failed', { provider, lat, lng, error: e })
-        return { provider: 'error', events: [], error: String(e) }
-      }
-    },
-    () => ({ provider: 'fallback', events: [], error: 'Service temporarily unavailable' })
-  )
+  try {
+    return await fn(lat, lng)
+  } catch (e) {
+    return { provider: 'error', events: [], error: String(e) }
+  }
 }
 
 export async function fetchTrafficInfo(lat: number, lng: number) {
   const provider = process.env.TRAFFIC_PROVIDER || 'default'
   const fn = trafficProviders[provider as keyof typeof trafficProviders]
   if (!fn) throw new Error('unsupported traffic provider: ' + provider)
-  
-  return await trafficCircuitBreaker.execute(
-    async () => {
-      try {
-        return await fn(lat, lng)
-      } catch (e) {
-        error('Traffic fetch failed', { provider, lat, lng, error: e })
-        return { provider: 'error', congestion: null, error: String(e) }
-      }
-    },
-    () => ({ provider: 'fallback', congestion: 25, error: 'Service temporarily unavailable' })
-  )
+  try {
+    return await fn(lat, lng)
+  } catch (e) {
+    return { provider: 'error', congestion: null, error: String(e) }
+  }
 }
 
 /** @param {number} lat @param {number} lng */
@@ -147,47 +117,53 @@ export async function reverseGeocode(lat: number, lng: number) {
   const key = `${lat},${lng}`
   const cached = geocodeCache.get(key)
   if (cached) return cached
-  
-  return await geocodeCircuitBreaker.execute(
-    async () => {
-      const provider = process.env.GEOCODE_PROVIDER || 'nominatim'
-      if (provider === 'nominatim') {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`
-        const raw = await retry(() => timeoutFetch(url, { method: 'GET', headers: { 'User-Agent': 'daylight/0.1 (+https://example.com)' } }, 2500), 2, 300)
-        if (!raw.ok) throw new Error(`geocode fetch failed: ${raw.status}`)
-        const body = await raw.json()
-        const result = { display_name: body.display_name }
-        geocodeCache.set(key, result)
-        const entry = { type: 'geocode', provider, lat, lng, ok: true }
-        if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
-        else appendHistory(entry)
-        return result
-      }
-      
-      if (provider === 'mapbox') {
-        let token = process.env.MAPBOX_TOKEN
-        // if a secret ARN is provided, fetch it at runtime (dev + prod)
-        const secretArn = process.env.MAPBOX_SECRET_ARN
-        if (secretArn) {
-          try { const s = await getSecretValue(secretArn); if (s) token = s } catch (e) { /* ignore */ }
-        }
-        if (!token) throw new Error('MAPBOX_TOKEN not set')
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(lng)},${encodeURIComponent(lat)}.json?access_token=${encodeURIComponent(token)}&limit=1`
-        const raw = await retry(() => timeoutFetch(url, { method: 'GET' }, 2500), 2, 300)
-        if (!raw.ok) throw new Error(`mapbox geocode failed: ${raw.status}`)
-        const body = await raw.json()
-        const place = body.features?.[0]?.place_name
-        const result = { display_name: place }
-        geocodeCache.set(key, result)
-        const entry = { type: 'geocode', provider, lat, lng, ok: true }
-        if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
-        else appendHistory(entry)
-        return result
-      }
-      
-      throw new Error('unsupported geocode provider')
-    },
-    () => ({ display_name: `Location near ${lat.toFixed(2)}, ${lng.toFixed(2)}` })
-  )
+  const provider = process.env.GEOCODE_PROVIDER || 'nominatim'
+  if (provider === 'nominatim') {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`
+    try {
+      const raw = await retry(() => timeoutFetch(url, { method: 'GET', headers: { 'User-Agent': 'daylight/0.1 (+https://example.com)' } }, 2500), 2, 300)
+      if (!raw.ok) throw new Error(`geocode fetch failed: ${raw.status}`)
+      const body = await raw.json()
+      const result = { display_name: body.display_name }
+      geocodeCache.set(key, result)
+      const entry = { type: 'geocode', provider, lat, lng, ok: true }
+      if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
+      else appendHistory(entry)
+      return result
+    } catch (err) {
+      const entry = { type: 'geocode', provider, lat, lng, ok: false, error: String(err) }
+      if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
+      else appendHistory(entry)
+      throw err
+    }
+  }
+  if (provider === 'mapbox') {
+    let token = process.env.MAPBOX_TOKEN
+    // if a secret ARN is provided, fetch it at runtime (dev + prod)
+    const secretArn = process.env.MAPBOX_SECRET_ARN
+    if (secretArn) {
+      try { const s = await getSecretValue(secretArn); if (s) token = s } catch (e) { /* ignore */ }
+    }
+    if (!token) throw new Error('MAPBOX_TOKEN not set')
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(lng)},${encodeURIComponent(lat)}.json?access_token=${encodeURIComponent(token)}&limit=1`
+    try {
+      const raw = await retry(() => timeoutFetch(url, { method: 'GET' }, 2500), 2, 300)
+      if (!raw.ok) throw new Error(`mapbox geocode failed: ${raw.status}`)
+      const body = await raw.json()
+      const place = body.features?.[0]?.place_name
+      const result = { display_name: place }
+      geocodeCache.set(key, result)
+      const entry = { type: 'geocode', provider, lat, lng, ok: true }
+      if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
+      else appendHistory(entry)
+      return result
+    } catch (err) {
+      const entry = { type: 'geocode', provider, lat, lng, ok: false, error: String(err) }
+      if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
+      else appendHistory(entry)
+      throw err
+    }
+  }
+  throw new Error('unsupported geocode provider')
 }
 

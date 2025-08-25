@@ -103,25 +103,6 @@ resource "aws_dynamodb_table" "trips" {
     name = "tripId"
     type = "S"
   }
-
-  # Enable point-in-time recovery for data protection
-  point_in_time_recovery {
-    enabled = true
-  }
-
-  # Enable server-side encryption at rest
-  server_side_encryption {
-    enabled = true
-  }
-
-  # Enable deletion protection (disable for dev environments)
-  deletion_protection_enabled = var.enable_deletion_protection
-
-  tags = {
-    Name        = "daylight-trips-${var.env}"
-    Environment = var.env
-    Backup      = "enabled"
-  }
 }
 
 # --- Lambda IAM role & policy ---
@@ -279,10 +260,9 @@ resource "aws_apigatewayv2_api" "api" {
   name          = "daylight_api_${random_pet.suffix.id}"
   protocol_type = "HTTP"
   cors_configuration {
-    allow_headers = ["Content-Type", "Authorization", "X-Requested-With"]
-    allow_methods = ["GET", "POST", "OPTIONS"]
-    allow_origins = var.allowed_origins
-    max_age       = 86400
+    allow_headers = ["*"]
+    allow_methods = ["GET","POST","OPTIONS"]
+    allow_origins = ["*"]
   }
 }
 
@@ -334,170 +314,6 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.api.id
   name        = "$default"
   auto_deploy = true
-  
-  default_route_settings {
-    throttling_rate_limit  = var.api_rate_limit
-    throttling_burst_limit = var.api_burst_limit
-  }
-  
-  access_log_settings {
-    destination_arn = aws_cloudwatch_log_group.api_gateway.arn
-    format = jsonencode({
-      requestId      = "$context.requestId"
-      ip             = "$context.identity.sourceIp"
-      requestTime    = "$context.requestTime"
-      httpMethod     = "$context.httpMethod"
-      routeKey       = "$context.routeKey"
-      status         = "$context.status"
-      protocol       = "$context.protocol"
-      responseLength = "$context.responseLength"
-      error          = "$context.error.message"
-      integrationError = "$context.integrationErrorMessage"
-    })
-  }
-}
-
-resource "aws_cloudwatch_log_group" "api_gateway" {
-  name              = "/aws/apigateway/daylight_${random_pet.suffix.id}"
-  retention_in_days = 14
-}
-
-# --- CloudWatch Monitoring & Alerting ---
-
-# CloudWatch Log Groups for Lambda functions
-resource "aws_cloudwatch_log_group" "plan_lambda" {
-  name              = "/aws/lambda/${aws_lambda_function.plan.function_name}"
-  retention_in_days = 14
-}
-
-resource "aws_cloudwatch_log_group" "trips_lambda" {
-  name              = "/aws/lambda/${aws_lambda_function.trips.function_name}"
-  retention_in_days = 14
-}
-
-# SNS Topic for alerts (optional - only create if email provided)
-resource "aws_sns_topic" "alerts" {
-  count = var.alert_email != "" ? 1 : 0
-  name  = "daylight-alerts-${random_pet.suffix.id}"
-}
-
-resource "aws_sns_topic_subscription" "email_alerts" {
-  count     = var.alert_email != "" ? 1 : 0
-  topic_arn = aws_sns_topic.alerts[0].arn
-  protocol  = "email"
-  endpoint  = var.alert_email
-}
-
-# Lambda Error Rate Alarms
-resource "aws_cloudwatch_metric_alarm" "plan_lambda_errors" {
-  count               = var.alert_email != "" ? 1 : 0
-  alarm_name          = "daylight-plan-lambda-errors-${random_pet.suffix.id}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "5"
-  alarm_description   = "This metric monitors plan lambda errors"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
-
-  dimensions = {
-    FunctionName = aws_lambda_function.plan.function_name
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "trips_lambda_errors" {
-  count               = var.alert_email != "" ? 1 : 0
-  alarm_name          = "daylight-trips-lambda-errors-${random_pet.suffix.id}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "5"
-  alarm_description   = "This metric monitors trips lambda errors"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
-
-  dimensions = {
-    FunctionName = aws_lambda_function.trips.function_name
-  }
-}
-
-# Lambda Duration Alarms
-resource "aws_cloudwatch_metric_alarm" "plan_lambda_duration" {
-  count               = var.alert_email != "" ? 1 : 0
-  alarm_name          = "daylight-plan-lambda-duration-${random_pet.suffix.id}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "Duration"
-  namespace           = "AWS/Lambda"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "25000"  # 25 seconds
-  alarm_description   = "This metric monitors plan lambda duration"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
-
-  dimensions = {
-    FunctionName = aws_lambda_function.plan.function_name
-  }
-}
-
-# API Gateway 4XX/5XX Error Alarms
-resource "aws_cloudwatch_metric_alarm" "api_4xx_errors" {
-  count               = var.alert_email != "" ? 1 : 0
-  alarm_name          = "daylight-api-4xx-errors-${random_pet.suffix.id}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "4XXError"
-  namespace           = "AWS/ApiGateway"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "20"
-  alarm_description   = "This metric monitors API Gateway 4XX errors"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
-
-  dimensions = {
-    ApiName = aws_apigatewayv2_api.api.name
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
-  count               = var.alert_email != "" ? 1 : 0
-  alarm_name          = "daylight-api-5xx-errors-${random_pet.suffix.id}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "1"
-  metric_name         = "5XXError"
-  namespace           = "AWS/ApiGateway"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "5"
-  alarm_description   = "This metric monitors API Gateway 5XX errors"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
-
-  dimensions = {
-    ApiName = aws_apigatewayv2_api.api.name
-  }
-}
-
-# DynamoDB Throttle Alarm
-resource "aws_cloudwatch_metric_alarm" "dynamodb_throttles" {
-  count               = var.alert_email != "" ? 1 : 0
-  alarm_name          = "daylight-dynamodb-throttles-${random_pet.suffix.id}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "UserRequestThrottleEvents"
-  namespace           = "AWS/DynamoDB"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "0"
-  alarm_description   = "This metric monitors DynamoDB throttle events"
-  alarm_actions       = [aws_sns_topic.alerts[0].arn]
-
-  dimensions = {
-    TableName = aws_dynamodb_table.trips.name
-  }
 }
 
 # --- Outputs ---

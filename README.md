@@ -1,28 +1,12 @@
 # Daylight
 
-Cloud-first trip planning and live re-planning engine with advanced features including map clustering, details panels, and production-ready security.
-
-## 🚀 Quick Start
-
-**New to this project?** Run our automated setup script:
-
-```bash
-# Clone and set up the entire development environment
-git clone <repository-url>
-cd daylight
-./setup-dev-environment.sh
-```
-
-This script installs all prerequisites (Node.js, Terraform, AWS CLI, Docker) and sets up the project dependencies.
-
-**For detailed setup instructions**, see [Development Setup Guide](docs/DEVELOPMENT_SETUP.md).
+Cloud-first trip planning and live re-planning engine.
 
 ## Documentation
 
 For the full implementation plan and architecture details, see:
 
-- [📚 Development Setup Guide](docs/DEVELOPMENT_SETUP.md) - Complete environment setup
-- [🏗️ Daylight v1 Implementation Pack (AWS, React, Vite, Terraform, CI)](docs/daylight_v_1_implementation_pack_aws_react_vite_terraform_ci.md) - Architecture overview
+- [Daylight v1 Implementation Pack (AWS, React, Vite, Terraform, CI)](docs/daylight_v_1_implementation_pack_aws_react_vite_terraform_ci.md)
 
 
 ## Status (quick)
