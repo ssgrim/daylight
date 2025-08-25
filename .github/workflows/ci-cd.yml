@@ -52,6 +52,16 @@ jobs:
           npm test || yarn test || true
         continue-on-error: true
 
+      - name: NPM Audit (backend)
+        run: |
+          cd backend
+          npm audit --audit-level=moderate || true
+
+      - name: NPM Audit (frontend)
+        run: |
+          cd frontend
+          npm audit --audit-level=moderate || true
+
       - name: Build frontend
         run: |
           cd frontend
