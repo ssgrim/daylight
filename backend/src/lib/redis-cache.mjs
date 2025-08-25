@@ -1,12 +1,25 @@
 let redis = null
-try {
-  const IORedis = await import('ioredis')
-  redis = IORedis.default
-} catch (e) {
-  // optional dependency not installed
+let redisPromise = null
+
+async function initRedis() {
+  if (redisPromise) return redisPromise
+  
+  redisPromise = (async () => {
+    try {
+      const IORedis = await import('ioredis')
+      redis = IORedis.default
+      return redis
+    } catch (e) {
+      // optional dependency not installed
+      return null
+    }
+  })()
+  
+  return redisPromise
 }
 
-export function createRedisCache() {
+export async function createRedisCache() {
+  await initRedis()
   const url = process.env.REDIS_URL
   if (!url || !redis) return null
   const client = new redis(url)
