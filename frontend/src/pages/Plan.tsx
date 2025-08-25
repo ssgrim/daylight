@@ -1,4 +1,6 @@
+
 import { useEffect, useState } from 'react'
+import { t, useLocale } from '../i18n'
 
 type Suggestion = {
   id: string
@@ -67,29 +69,38 @@ export default function Plan() {
     }
   }
 
+
+  const { locale, setLocale } = useLocale()
   return (
     <div className="p-6">
-      <h2 className="text-xl font-semibold">Planner</h2>
+      <div className="flex justify-end mb-2">
+        <label className="mr-2">Lang:</label>
+        <select value={locale} onChange={e => setLocale(e.target.value)} className="border rounded px-2 py-1">
+          <option value="en">EN</option>
+          <option value="es">ES</option>
+        </select>
+      </div>
+      <h2 className="text-xl font-semibold">{t('planner')}</h2>
       <div className="mt-3 flex gap-2 items-center">
-        <label className="text-sm">Lat</label>
+        <label className="text-sm">{t('lat')}</label>
         <input className="border px-2 py-1 rounded" value={latInput} onChange={(e) => setLatInput(e.target.value)} />
-        <label className="text-sm">Lng</label>
+        <label className="text-sm">{t('lng')}</label>
         <input className="border px-2 py-1 rounded" value={lngInput} onChange={(e) => setLngInput(e.target.value)} />
-        <button className="px-3 py-1 bg-sky-600 text-white rounded" onClick={() => fetchWithCoords(Number(latInput), Number(lngInput))}>Fetch</button>
-        <button className="ml-2 px-3 py-1 border rounded" onClick={() => { setLatInput('47.6062'); setLngInput('-122.3321') }}>Seattle</button>
-        <button className="ml-2 px-3 py-1 border rounded" onClick={() => { setLatInput('37.7749'); setLngInput('-122.4194') }}>San Francisco</button>
+        <button className="px-3 py-1 bg-sky-600 text-white rounded" onClick={() => fetchWithCoords(Number(latInput), Number(lngInput))}>{t('fetch')}</button>
+        <button className="ml-2 px-3 py-1 border rounded" onClick={() => { setLatInput('47.6062'); setLngInput('-122.3321') }}>{t('seattle')}</button>
+        <button className="ml-2 px-3 py-1 border rounded" onClick={() => { setLatInput('37.7749'); setLngInput('-122.4194') }}>{t('sanfrancisco')}</button>
       </div>
 
       <div className="mt-3 flex gap-2">
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showEvents} onChange={(e) => setShowEvents(e.target.checked)} /> Show events</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showTraffic} onChange={(e) => setShowTraffic(e.target.checked)} /> Show traffic</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showEvents} onChange={(e) => setShowEvents(e.target.checked)} /> {t('showEvents')}</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showTraffic} onChange={(e) => setShowTraffic(e.target.checked)} /> {t('showTraffic')}</label>
       </div>
 
       {loading ? (
-        <p className="text-slate-600">Loading suggestions…</p>
+        <p className="text-slate-600">{t('loading')}</p>
       ) : error ? (
         <div>
-          <p className="text-yellow-600">Unable to load live suggestions ({error}) — showing demo results.</p>
+          <p className="text-yellow-600">{t('unableToLoad')} ({error}) — showing demo results.</p>
           <ul className="mt-4 space-y-3">
             {suggestions.map((s) => (
               <li key={s.id} className="p-3 border rounded">
@@ -117,7 +128,7 @@ export default function Plan() {
               )}
               {showEvents && s.events && s.events.events && (
                 <div className="mt-2 text-sm">
-                  <div className="font-semibold">Nearby events</div>
+                  <div className="font-semibold">{t('nearbyEvents')}</div>
                   <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                     {s.events.events.map((e:any, idx:number) => (
                       <div key={e.id || idx} className="flex gap-2 p-2 border rounded">
@@ -125,7 +136,7 @@ export default function Plan() {
                         <div>
                           <div className="font-medium">{e.name}</div>
                           <div className="text-xs text-slate-500">{e.venue} {e.date ? `· ${new Date(e.date).toLocaleString()}` : ''}</div>
-                          {e.url && <a className="text-xs text-sky-600" href={e.url} target="_blank" rel="noreferrer">Tickets</a>}
+                          {e.url && <a className="text-xs text-sky-600" href={e.url} target="_blank" rel="noreferrer">{t('tickets')}</a>}
                         </div>
                       </div>
                     ))}
@@ -133,7 +144,7 @@ export default function Plan() {
                 </div>
               )}
               {showTraffic && s.traffic && s.traffic.congestion != null && (
-                <div className="mt-2 text-sm">Traffic congestion: <span className="font-semibold">{s.traffic.congestion}%</span></div>
+                <div className="mt-2 text-sm">{t('traffic')}: <span className="font-semibold">{s.traffic.congestion}%</span></div>
               )}
             </li>
           ))}
