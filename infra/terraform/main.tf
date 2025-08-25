@@ -70,6 +70,12 @@ resource "aws_cloudfront_distribution" "cdn" {
   viewer_certificate {
     cloudfront_default_certificate = true
   }
+  # SPA routing: serve index.html for 404s
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+  }
 }
 
 resource "aws_s3_bucket_policy" "frontend" {
