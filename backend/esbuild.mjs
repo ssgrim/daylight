@@ -11,8 +11,9 @@ await build({
   bundle: true,
   platform: 'node',
   target: 'node20',
-  format: 'cjs',
-  minify: true
+  format: 'esm',
+  minify: true,
+  packages: 'external'
 })
 
 function zipFile(srcFile, destZip) {

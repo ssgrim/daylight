@@ -4,6 +4,12 @@ variable "region" {
   default     = "us-west-1"  # N. California
 }
 
+variable "stage" {
+  description = "Deployment stage (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+}
+
 variable "mapbox_token" {
   description = "(optional) Mapbox API token for reverse geocoding"
   type        = string
