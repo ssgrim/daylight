@@ -74,3 +74,9 @@ jobs:
       # Add deployment steps here, e.g., upload to S3, deploy to EC2, etc.
       - name: Deploy placeholder
         run: echo "Deploy step - replace with real deployment logic."
+
+      - name: Synthetic check with Slack alert
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          bash ./synthetic-check.sh "https://d2ve6gb1nuejhg.cloudfront.net" "$SLACK_WEBHOOK"
