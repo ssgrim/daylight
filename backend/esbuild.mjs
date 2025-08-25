@@ -6,7 +6,12 @@ import path from 'node:path'
 mkdirSync('dist', { recursive: true })
 
 await build({
-  entryPoints: ['src/handlers/trips.ts', 'src/handlers/plan.ts'],
+  entryPoints: [
+    'src/handlers/trips.ts', 
+    'src/handlers/plan.ts',
+    'src/handlers/health.ts',
+    'src/handlers/secret-rotation.ts'
+  ],
   outdir: 'dist',
   bundle: true,
   platform: 'node',
@@ -35,4 +40,6 @@ function zipFile(srcFile, destZip) {
 
 zipFile('dist/trips.js', 'dist/trips.zip')
 zipFile('dist/plan.js', 'dist/plan.zip')
+zipFile('dist/health.js', 'dist/health.zip')
+zipFile('dist/secret-rotation.js', 'dist/secret-rotation.zip')
 console.log('Built Lambda zips')
