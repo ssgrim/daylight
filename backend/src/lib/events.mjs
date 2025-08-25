@@ -4,6 +4,16 @@ import { createCache } from './cache.mjs'
 
 const cache = createCache(30_000)
 
+// Export cache metrics for monitoring
+export function getEventsCacheMetrics() {
+  return cache.metrics()
+}
+
+// Manual cache invalidation
+export function invalidateEventsCache(key) {
+  return cache.invalidate(key)
+}
+
 // Lightweight local events adapter
 // Providers supported: 'ticketmaster' (via API key), otherwise 'mock'
 
@@ -33,9 +43,10 @@ export async function fetchLocalEvents(lat, lng) {
       url: e.url || null,
       genre: e.classifications?.[0]?.genre?.name || null
     }))
-    const out = { provider, events }
-  await cache.set(cacheKey, out)
-    return out
+  const out = { provider, events }
+  // TTL: 30s for events, can override per call if needed
+  await cache.set(cacheKey, out, 30_000)
+  return out
   }
   // mock fallback
   return { provider: 'mock', events: [{ name: 'Farmers Market', venue: 'Main St Park', date: null }, { name: 'Open-Air Concert', venue: 'River Stage', date: null }] }

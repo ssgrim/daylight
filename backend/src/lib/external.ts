@@ -8,8 +8,15 @@ import { info, warn, error } from './logger.mjs'
 import { getSeasonFor } from './season.mjs'
 import { initDb, appendDb } from './history.mjs'
 import { getSecretValue } from './secrets.mjs'
-import { fetchLocalEvents } from './events.mjs'
-import { fetchTraffic } from './traffic.mjs'
+import { fetchLocalEvents, getEventsCacheMetrics } from './events.mjs'
+import { fetchTraffic, getTrafficCacheMetrics } from './traffic.mjs'
+// Expose cache metrics for monitoring
+export function getCacheMetrics() {
+  return {
+    events: getEventsCacheMetrics(),
+    traffic: getTrafficCacheMetrics(),
+  }
+}
 
 const geocodeCache = LRU(500)
 const HISTORY_FILE = path.resolve(process.cwd(), 'backend', 'external_history.log')
