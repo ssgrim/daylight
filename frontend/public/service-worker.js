@@ -11,14 +11,21 @@ self.addEventListener('fetch', event => {
   // Cache-first for navigation and static assets
   if (event.request.method === 'GET' && (event.request.mode === 'navigate' || event.request.destination === 'script' || event.request.destination === 'style' || event.request.destination === 'image')) {
     event.respondWith(
-      caches.open('daylight-v1').then(cache =>
-        cache.match(event.request).then(resp =>
-          resp || fetch(event.request).then(response => {
-            cache.put(event.request, response.clone())
-            return response
-          })
-        )
-      )
+      caches.open('daylight-v1').then(async cache => {
+        const resp = await cache.match(event.request)
+        if (resp) return resp
+        try {
+          const response = await fetch(event.request)
+          cache.put(event.request, response.clone())
+          return response
+        } catch (e) {
+          // Offline shell fallback for navigation
+          if (event.request.mode === 'navigate') {
+            return cache.match('/index.html')
+          }
+          throw e
+        }
+      })
     )
   }
 })
