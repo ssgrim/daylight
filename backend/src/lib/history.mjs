@@ -1,7 +1,9 @@
+
 import sqlite3 from 'sqlite3'
 import { open } from 'sqlite'
 import path from 'path'
 import fs from 'fs'
+import { warn } from './logger.mjs'
 
 const DB_PATH = path.resolve(process.cwd(), 'backend', 'external_history.sqlite')
 
@@ -16,7 +18,7 @@ export async function initDb() {
     await db.exec(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, ts TEXT, type TEXT, provider TEXT, lat REAL, lng REAL, ok INTEGER, error TEXT)`)
     return db
   } catch (err) {
-    console.warn('initDb failed', String(err))
+  warn('initDb failed', String(err))
     throw err
   }
 }

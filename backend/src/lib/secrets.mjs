@@ -1,5 +1,7 @@
+
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager'
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm'
+import { warn } from './logger.mjs'
 
 const sm = new SecretsManagerClient({})
 const ssm = new SSMClient({})
@@ -22,7 +24,7 @@ export async function getSecretValue(secretArnOrName, opts = { fromSSM: false })
     cache.set(secretArnOrName, secret)
     return secret
   } catch (err) {
-    console.warn('getSecretValue error', String(err))
+  warn('getSecretValue error', String(err))
     return null
   }
 }
