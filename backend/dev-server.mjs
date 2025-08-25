@@ -127,6 +127,23 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    if (req.url && req.url.startsWith('/circuit-breaker-health')) {
+      try {
+        const { handler } = await import('./dist/handlers/circuit-breaker-health.js')
+        const result = await handler({})
+        
+        const headers = Object.assign({}, defaultCors, result.headers || { 'content-type': 'application/json' })
+        res.writeHead(result.statusCode || 200, headers)
+        res.end(result.body)
+        return
+      } catch (err) {
+        const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' })
+        res.writeHead(500, headers)
+        res.end(JSON.stringify({ error: String(err) }))
+        return
+      }
+    }
+
     if (req.url && req.url.startsWith('/history')) {
       const url = new URL(req.url, `http://localhost`)
       const query = Object.fromEntries(url.searchParams.entries())

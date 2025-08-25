@@ -1,4 +1,4 @@
-// Lightweight adapters for external data sources (no new dependencies)
+// Lightweight adapters for external data sources with circuit breaker pattern
 // Uses public APIs that don't require API keys by default.
 
 import fs from 'fs'
@@ -10,6 +10,7 @@ import { initDb, appendDb } from './history.mjs'
 import { getSecretValue } from './secrets.mjs'
 import { fetchLocalEvents } from './events.mjs'
 import { fetchTraffic } from './traffic.mjs'
+import { fetchWithCircuitBreaker, fetchWeatherData, fetchGeocodingData } from './enhanced-fetch'
 
 const geocodeCache = LRU(500)
 const HISTORY_FILE = path.resolve(process.cwd(), 'backend', 'external_history.log')
@@ -20,6 +21,7 @@ try { dbPromise = initDb() } catch (e) { dbPromise = null }
  * @param {string} url
  * @param {RequestInit} [opts]
  * @param {number} [ms]
+ * @deprecated Use fetchWithCircuitBreaker instead
  */
 function timeoutFetch(url, opts = {}, ms = 3000) {
   const controller = new AbortController()
@@ -32,6 +34,7 @@ function timeoutFetch(url, opts = {}, ms = 3000) {
  * @param {() => Promise<any>} fn
  * @param {number} [attempts]
  * @param {number} [delayMs]
+ * @deprecated Use fetchWithCircuitBreaker with retries instead
  */
 async function retry(fn, attempts = 2, delayMs = 300) {
   let lastErr = null
@@ -51,15 +54,24 @@ export async function fetchWeather(lat, lng) {
   // provider switchable via env; default: open-meteo
   const provider = process.env.WEATHER_PROVIDER || 'open-meteo'
   if (provider === 'open-meteo') {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&current_weather=true&timezone=UTC`
-    const raw = await retry(() => timeoutFetch(url, { method: 'GET' }, 2500), 2, 300)
-    if (!raw.ok) throw new Error(`weather fetch failed: ${raw.status}`)
-    const body = await raw.json()
-    const cw = body.current_weather || {}
-    const summary = cw.temperature != null ? `Temp ${cw.temperature}°C, wind ${cw.windspeed} km/h` : undefined
-  const season = getSeasonFor(lat, new Date())
-  appendHistory({ type: 'weather', provider, lat, lng, ok: true, season })
-  return { temperatureC: cw.temperature, windSpeedKph: cw.windspeed, weatherCode: cw.weathercode, summary, season }
+    try {
+      const result = await fetchWeatherData(lat, lng)
+      const body = result.data
+      const cw = body.current_weather || {}
+      const summary = cw.temperature != null ? `Temp ${cw.temperature}°C, wind ${cw.windspeed} km/h` : undefined
+      const season = getSeasonFor(lat, new Date())
+      
+      const entry = { type: 'weather', provider, lat, lng, ok: true, season, fromFallback: result.fromFallback }
+      if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
+      else appendHistory(entry)
+      
+      return { temperatureC: cw.temperature, windSpeedKph: cw.windspeed, weatherCode: cw.weathercode, summary, season }
+    } catch (err) {
+      const entry = { type: 'weather', provider, lat, lng, ok: false, error: String(err) }
+      if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
+      else appendHistory(entry)
+      throw err
+    }
   }
   // placeholder for other providers (openweathermap, etc.)
   throw new Error('unsupported weather provider')
@@ -86,19 +98,21 @@ export async function reverseGeocode(lat, lng) {
   const key = `${lat},${lng}`
   const cached = geocodeCache.get(key)
   if (cached) return cached
+  
   const provider = process.env.GEOCODE_PROVIDER || 'nominatim'
+  
   if (provider === 'nominatim') {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`
     try {
-      const raw = await retry(() => timeoutFetch(url, { method: 'GET', headers: { 'User-Agent': 'daylight/0.1 (+https://example.com)' } }, 2500), 2, 300)
-      if (!raw.ok) throw new Error(`geocode fetch failed: ${raw.status}`)
-      const body = await raw.json()
-      const result = { display_name: body.display_name }
-      geocodeCache.set(key, result)
-      const entry = { type: 'geocode', provider, lat, lng, ok: true }
+      const result = await fetchGeocodingData(lat, lng)
+      const body = result.data
+      const geocodeResult = { display_name: body.display_name || 'Location unavailable' }
+      geocodeCache.set(key, geocodeResult)
+      
+      const entry = { type: 'geocode', provider, lat, lng, ok: true, fromFallback: result.fromFallback }
       if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
       else appendHistory(entry)
-      return result
+      
+      return geocodeResult
     } catch (err) {
       const entry = { type: 'geocode', provider, lat, lng, ok: false, error: String(err) }
       if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
@@ -106,6 +120,7 @@ export async function reverseGeocode(lat, lng) {
       throw err
     }
   }
+  
   if (provider === 'mapbox') {
     let token = process.env.MAPBOX_TOKEN
     // if a secret ARN is provided, fetch it at runtime (dev + prod)
@@ -114,18 +129,28 @@ export async function reverseGeocode(lat, lng) {
       try { const s = await getSecretValue(secretArn); if (s) token = s } catch (e) { /* ignore */ }
     }
     if (!token) throw new Error('MAPBOX_TOKEN not set')
+    
     const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(lng)},${encodeURIComponent(lat)}.json?access_token=${encodeURIComponent(token)}&limit=1`
+    
     try {
-      const raw = await retry(() => timeoutFetch(url, { method: 'GET' }, 2500), 2, 300)
-      if (!raw.ok) throw new Error(`mapbox geocode failed: ${raw.status}`)
-      const body = await raw.json()
+      const result = await fetchWithCircuitBreaker(url, {
+        circuitBreakerName: 'mapbox-service',
+        timeout: 6000,
+        fallbackData: {
+          features: [{ place_name: 'Location unavailable' }]
+        }
+      })
+      
+      const body = result.data
       const place = body.features?.[0]?.place_name
-      const result = { display_name: place }
-      geocodeCache.set(key, result)
-      const entry = { type: 'geocode', provider, lat, lng, ok: true }
+      const geocodeResult = { display_name: place }
+      geocodeCache.set(key, geocodeResult)
+      
+      const entry = { type: 'geocode', provider, lat, lng, ok: true, fromFallback: result.fromFallback }
       if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
       else appendHistory(entry)
-      return result
+      
+      return geocodeResult
     } catch (err) {
       const entry = { type: 'geocode', provider, lat, lng, ok: false, error: String(err) }
       if (dbPromise) (await dbPromise).then(db => appendDb(db, { ts: new Date().toISOString(), ...entry }))
@@ -133,6 +158,7 @@ export async function reverseGeocode(lat, lng) {
       throw err
     }
   }
+  
   throw new Error('unsupported geocode provider')
 }
 
