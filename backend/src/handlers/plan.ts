@@ -1,7 +1,10 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda'
 import { fetchWeather, reverseGeocode, fetchEvents, fetchTrafficInfo } from '../lib/external'
 import { info, error } from '../lib/logger.mjs'
+import { capturePromise } from '../lib/xray.mjs'
 
+
+async function planHandler(event: any) {
   const now = new Date().toISOString()
   const requestId = event?.requestContext?.requestId || event?.requestContext?.requestId || undefined
   try {
@@ -46,3 +49,5 @@ import { info, error } from '../lib/logger.mjs'
     return { statusCode: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify([{ id:'1', title:'Demo Stop', start:now, end:now, score:95, reason: `enrich failed: ${err.message}` }]) }
   }
 }
+
+export const handler = (event: any) => capturePromise('plan.handler', () => planHandler(event))
