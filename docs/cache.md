@@ -28,6 +28,15 @@ Security note
 
 The `/__cache` endpoint is intended for local development only. Do NOT expose this endpoint in production without proper authentication and authorization.
 
+Admin token
+
+You can require a token to access `/__cache` by setting the `CACHE_ADMIN_TOKEN` environment variable. When set, requests must include one of:
+
+- `Authorization: Bearer <token>` header
+- `X-Admin-Token: <token>` header
+
+This is a lightweight guard for development; for production use a stronger auth mechanism.
+
 Metrics
 
 Each cache object exposes a `metrics()` method (hits/misses/sets/invalidations). The aggregated `getCacheMetrics()` helper is available from `backend/src/lib/external.ts` for integration with monitoring.
