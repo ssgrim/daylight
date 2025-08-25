@@ -4,10 +4,14 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './styles/index.css'
 import Root from './pages/Root'
 import Plan from './pages/Plan'
+import { ReviewsPage } from './pages/ReviewsPage'
+import { ReviewsDemo } from './pages/ReviewsDemo'
 
 const router = createBrowserRouter([
   { path: '/', element: <Root /> },
   { path: '/plan', element: <Plan /> },
+  { path: '/reviews/:locationId', element: <ReviewsPage /> },
+  { path: '/reviews-demo', element: <ReviewsDemo /> },
 ])
 
 
