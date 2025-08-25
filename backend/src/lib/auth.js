@@ -12,7 +12,13 @@ let jwksClientInstance = null
 
 function getJwksClient() {
   if (!jwksClientInstance && COGNITO_USER_POOL_ID) {
-    const jwksUri = `https://cognito-idp.${COGNITO_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json`
+    // Initialize JWKS client for JWT verification
+const jwksClient = jwks({
+  jwksUri: `https://cognito-idp.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`,
+  cache: true,
+  cacheMaxEntries: 5,
+  cacheMaxAge: 600000 // 10 minutes
+})
     jwksClientInstance = jwksClient({
       jwksUri,
       requestHeaders: {},
