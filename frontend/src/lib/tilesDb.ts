@@ -6,7 +6,7 @@ const DB_VERSION = 1
 
 export async function getDb() {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db: any) {
       if (!db.objectStoreNames.contains('tiles')) {
         const s = db.createObjectStore('tiles', { keyPath: 'url' })
         s.createIndex('by-url', 'url')
@@ -41,6 +41,21 @@ export async function getRegion(id: string) {
 export async function listTiles() {
   const db = await getDb()
   return db.getAll('tiles')
+}
+
+export async function deleteTile(url: string) {
+  const db = await getDb()
+  await db.delete('tiles', url)
+}
+
+export async function listRegions() {
+  const db = await getDb()
+  return db.getAll('regions')
+}
+
+export async function deleteRegion(id: string) {
+  const db = await getDb()
+  await db.delete('regions', id)
 }
 
 export async function clearOldTiles(olderThanMs: number) {

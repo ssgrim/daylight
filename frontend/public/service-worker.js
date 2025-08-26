@@ -68,4 +68,18 @@ self.addEventListener('message', event => {
       })
     )
   }
+  if (event.data.type === 'DELETE_REGION' && event.data.urls && Array.isArray(event.data.urls)) {
+    const urls = event.data.urls
+    event.waitUntil(
+      caches.open('daylight-tiles-v1').then(async cache => {
+        for (const u of urls) {
+          try {
+            await cache.delete(u)
+          } catch (e) {
+            // ignore individual errors
+          }
+        }
+      })
+    )
+  }
 })

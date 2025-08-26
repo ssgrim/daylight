@@ -44,6 +44,8 @@ export default function Plan() {
   const [mapCenter, setMapCenter] = useState<[number, number]>([Number(latInput), Number(lngInput)])
   const [mapZoom, setMapZoom] = useState(10)
   const [mapBounds, setMapBounds] = useState<[[number, number], [number, number]] | null>(null)
+  const [regions, setRegions] = useState<Array<{ id: string; name: string; urls: string[]; createdAt: number }>>([])
+  const [downloadingRegionId, setDownloadingRegionId] = useState<string | null>(null)
 
   // Update map center when lat/lng input changes
   useEffect(() => {
@@ -73,6 +75,19 @@ export default function Plan() {
     }
     return urls
   }
+
+    // Regions management helpers (using tilesDb)
+    useEffect(() => {
+      ;(async () => {
+        try {
+          const mod = await import('../lib/tilesDb')
+          const rs = await mod.listRegions()
+          setRegions(rs || [])
+        } catch (e) {
+          // ignore
+        }
+      })()
+    }, [])
 
   // Markers for map
   const markers = suggestions.map((s) => ({
@@ -312,23 +327,40 @@ export default function Plan() {
               />
             </Suspense>
             <div className="mt-2">
-              <button
-                className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                onClick={() => {
-                  const urls = getTileUrlsForBounds(mapBounds, mapZoom)
-                  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'DOWNLOAD_TILES', urls })
-                  } else if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.ready.then(reg => {
-                      reg.active && reg.active.postMessage({ type: 'DOWNLOAD_TILES', urls })
-                    })
-                  } else {
-                    alert('Service worker not available in this browser')
-                  }
-                }}
-              >
-                Download visible tiles for offline use
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                  onClick={async () => {
+                    const urls = getTileUrlsForBounds(mapBounds, mapZoom)
+                    if (urls.length === 0) return alert('No tiles calculated for current viewport')
+                    const id = `region-${Date.now()}`
+                    setDownloadingRegionId(id)
+                    // save region metadata first
+                    try {
+                      const mod = await import('../lib/tilesDb')
+                      await mod.putRegion(id, { name: `Region ${new Date().toLocaleString()}`, urls, zoom: mapZoom, bounds: mapBounds })
+                      setRegions((r) => [...r, { id, name: `Region ${new Date().toLocaleString()}`, urls, createdAt: Date.now() }])
+                    } catch (e) {
+                      // ignore
+                    }
+                    // trigger SW download
+                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                      navigator.serviceWorker.controller.postMessage({ type: 'DOWNLOAD_TILES', urls })
+                    } else if ('serviceWorker' in navigator) {
+                      navigator.serviceWorker.ready.then(reg => {
+                        reg.active && reg.active.postMessage({ type: 'DOWNLOAD_TILES', urls })
+                      })
+                    } else {
+                      alert('Service worker not available in this browser')
+                    }
+                    setDownloadingRegionId(null)
+                  }}
+                >
+                  Download visible tiles for offline use
+                </button>
+
+                <div className="text-sm text-gray-500">{regions.length} offline region(s)</div>
+              </div>
             </div>
             {mapBounds && (
               <div className="text-xs text-gray-500 mt-2">
@@ -336,6 +368,48 @@ export default function Plan() {
               </div>
             )}
           </div>
+
+            {/* Regions management */}
+            <div className="mt-4 bg-gray-50 p-4 rounded">
+              <h3 className="text-sm font-medium mb-2">Offline Regions</h3>
+              {regions.length === 0 ? (
+                <div className="text-sm text-gray-500">No regions downloaded yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {regions.map(r => (
+                    <div key={r.id} className="flex items-center justify-between border border-gray-200 rounded p-2">
+                      <div>
+                        <div className="font-medium text-sm">{r.name}</div>
+                        <div className="text-xs text-gray-500">Tiles: {r.urls.length} • Downloaded: {new Date(r.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-2 py-1 text-sm bg-red-600 text-white rounded"
+                          onClick={async () => {
+                            if (!confirm('Delete this region and its cached tiles?')) return
+                            try {
+                              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                                navigator.serviceWorker.controller.postMessage({ type: 'DELETE_REGION', urls: r.urls })
+                              } else if ('serviceWorker' in navigator) {
+                                const reg = await navigator.serviceWorker.ready
+                                reg.active && reg.active.postMessage({ type: 'DELETE_REGION', urls: r.urls })
+                              }
+                              const mod = await import('../lib/tilesDb')
+                              await mod.deleteRegion(r.id)
+                              setRegions(rs => rs.filter(x => x.id !== r.id))
+                            } catch (e) {
+                              // ignore
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
           {/* Location controls */}
           <div className="flex flex-wrap gap-2 items-center mb-4">
