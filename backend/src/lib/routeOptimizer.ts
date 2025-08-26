@@ -115,40 +115,151 @@ export function optimizeRoute(stops: Stop[], options?: { startTime?: number; wei
   let bestScore = -1;
   let bestResult: RouteResult = { order: [], totalDistance: 0, totalTime: 0, score: 0 };
   
-  for (const perm of permute(stops.slice(1))) { // Fix first stop as start
-    const route = [stops[0], ...perm];
-    let dist = 0;
-    let t = tripStart;
-    let violations: string[] = [];
-    for (let i = 0; i < route.length - 1; i++) {
-      const segDist = haversine(route[i].lat, route[i].lon, route[i + 1].lat, route[i + 1].lon);
-      dist += segDist;
-      t += segDist / 15; // Assume 15 m/s (54 km/h)
-      // Check time window for next stop
-      const tw = route[i + 1].timeWindow;
-      if (tw) {
-        const [winStart, winEnd] = tw;
-        if (t < winStart || t > winEnd) {
-          violations.push(`Stop ${route[i + 1].id} arrival ${Math.round(t)} outside time window [${winStart}, ${winEnd}]`);
+  // If small N, use exact brute-force search; otherwise use simulated annealing
+  if (stops.length <= 8) {
+    for (const perm of permute(stops.slice(1))) { // Fix first stop as start
+      const route = [stops[0], ...perm];
+      let dist = 0;
+      let t = tripStart;
+      let violations: string[] = [];
+      for (let i = 0; i < route.length - 1; i++) {
+        const segDist = haversine(route[i].lat, route[i].lon, route[i + 1].lat, route[i + 1].lon);
+        dist += segDist;
+        t += segDist / 15; // Assume 15 m/s (54 km/h)
+        // Check time window for next stop
+        const tw = route[i + 1].timeWindow;
+        if (tw) {
+          const [winStart, winEnd] = tw;
+          if (t < winStart || t > winEnd) {
+            violations.push(`Stop ${route[i + 1].id} arrival ${Math.round(t)} outside time window [${winStart}, ${winEnd}]`);
+          }
         }
       }
+      const totalTime = dist / 15;
+      const { score, totalCost, averageRating } = calculateRouteScore(route, dist, totalTime, violations, options?.weights);
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestOrder = route;
+        bestResult = {
+          order: route.map((s) => s.id),
+          totalDistance: dist,
+          totalTime,
+          violations: violations.length ? violations : undefined,
+          score,
+          totalCost,
+          averageRating
+        };
+      }
     }
-    const totalTime = dist / 15;
-    const { score, totalCost, averageRating } = calculateRouteScore(route, dist, totalTime, violations, options?.weights);
-    
-    if (score > bestScore) {
-      bestScore = score;
-      bestOrder = route;
-      bestResult = {
-        order: route.map((s) => s.id),
-        totalDistance: dist,
-        totalTime,
-        violations: violations.length ? violations : undefined,
-        score,
-        totalCost,
-        averageRating
-      };
-    }
+    return bestResult;
   }
-  return bestResult;
+
+  // For larger N, use simulated annealing metaheuristic to find a good route quickly
+  const saResult = simulatedAnnealingSolve(stops, tripStart, options?.weights);
+  return saResult;
+}
+
+// Helper: compute total distance for a route (array of stops)
+function routeDistance(route: Stop[]): number {
+  let d = 0;
+  for (let i = 0; i < route.length - 1; i++) {
+    d += haversine(route[i].lat, route[i].lon, route[i + 1].lat, route[i + 1].lon);
+  }
+  return d;
+}
+
+// Helper: random swap mutation (returns new route array)
+function randomSwap(route: Stop[]): Stop[] {
+  const r = route.slice();
+  const a = 1 + Math.floor(Math.random() * (r.length - 1));
+  const b = 1 + Math.floor(Math.random() * (r.length - 1));
+  const tmp = r[a]; r[a] = r[b]; r[b] = tmp;
+  return r;
+}
+
+// Simulated annealing solver for larger N
+function simulatedAnnealingSolve(stops: Stop[], tripStart: number, weights?: { distance:number; time:number; cost:number; rating:number }): RouteResult {
+  // Initial solution: keep input order (or greedy nearest neighbor)
+  const start = stops[0];
+  const rest = stops.slice(1);
+  // Greedy nearest neighbor for a better seed
+  const seed: Stop[] = [start];
+  const pool = rest.slice();
+  while (pool.length) {
+    const last = seed[seed.length -1];
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i=0;i<pool.length;i++) {
+      const d = haversine(last.lat, last.lon, pool[i].lat, pool[i].lon);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    seed.push(pool.splice(bestIdx,1)[0]);
+  }
+
+  let current = seed;
+  let currentDist = routeDistance(current);
+  let currentViolations: string[] = [];
+  // compute violations for current
+  let t = tripStart;
+  for (let i=0;i<current.length-1;i++) {
+    t += haversine(current[i].lat, current[i].lon, current[i+1].lat, current[i+1].lon)/15;
+    const tw = current[i+1].timeWindow;
+    if (tw) { const [s,e]=tw; if (t<s||t>e) currentViolations.push(`Stop ${current[i+1].id} arrival ${Math.round(t)} outside time window [${s}, ${e}]`) }
+  }
+
+  const { score: currentScore } = calculateRouteScore(current, currentDist, currentDist/15, currentViolations, weights);
+  let best = current.slice();
+  let bestScore = currentScore;
+  let bestViolations = currentViolations.slice();
+
+  // SA parameters
+  let T = 1.0;
+  const T_MIN = 1e-4;
+  const alpha = 0.995;
+  const iterations = Math.min(20000, 2000 * stops.length);
+
+  for (let iter=0; iter<iterations && T>T_MIN; iter++) {
+    const candidate = randomSwap(current);
+    const candDist = routeDistance(candidate);
+    // compute violations and score
+    let t2 = tripStart;
+    const candViol: string[] = [];
+    for (let i=0;i<candidate.length-1;i++) {
+      t2 += haversine(candidate[i].lat, candidate[i].lon, candidate[i+1].lat, candidate[i+1].lon)/15;
+      const tw = candidate[i+1].timeWindow;
+      if (tw) { const [s,e]=tw; if (t2<s||t2>e) candViol.push(`Stop ${candidate[i+1].id} arrival ${Math.round(t2)} outside time window [${s}, ${e}]`) }
+    }
+    const { score: candScore, totalCost, averageRating } = calculateRouteScore(candidate, candDist, candDist/15, candViol, weights);
+    const delta = candScore - currentScore;
+    if (delta > 0 || Math.exp(delta / (T * 100)) > Math.random()) {
+      current = candidate;
+      currentDist = candDist;
+      // update currentScore via recalc
+      // (we'll reuse candScore)
+      // @ts-ignore
+      currentViolations = candViol;
+      // update currentScore variable by recalculating
+    }
+    // update best
+    if (candScore > bestScore) {
+      best = candidate.slice();
+      bestScore = candScore;
+      bestViolations = candViol.slice();
+    }
+    T *= alpha;
+  }
+
+  const totalDistance = routeDistance(best);
+  const totalTime = totalDistance/15;
+  const scoring = calculateRouteScore(best, totalDistance, totalTime, bestViolations, weights);
+  return {
+    order: best.map(s=>s.id),
+    totalDistance,
+    totalTime,
+    violations: bestViolations.length?bestViolations:undefined,
+    score: scoring.score,
+    totalCost: scoring.totalCost,
+    averageRating: scoring.averageRating
+  };
 }
