@@ -50,6 +50,30 @@ export default function Plan() {
     setMapCenter([Number(latInput), Number(lngInput)])
   }, [latInput, lngInput])
 
+  // Helper to compute slippy map tile x,y from lat/lng and zoom
+  const lat2tile = (lat: number, zoom: number) => {
+    const z = Math.pow(2, zoom)
+    const xtile = Math.floor(((lngInput ? Number(lngInput) : 0) + 180) / 360 * z)
+    const ytile = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * z)
+    return { x: xtile, y: ytile }
+  }
+
+  const getTileUrlsForBounds = (bounds: [[number, number], [number, number]] | null, zoom: number) => {
+    if (!bounds) return []
+    const [sw, ne] = bounds
+    const min = lat2tile(ne[0], Math.round(zoom))
+    const max = lat2tile(sw[0], Math.round(zoom))
+    const urls: string[] = []
+    const z = Math.round(zoom)
+    for (let x = Math.min(min.x, max.x); x <= Math.max(min.x, max.x); x++) {
+      for (let y = Math.min(min.y, max.y); y <= Math.max(min.y, max.y); y++) {
+        // Using OSM tile server for dev; respect tile usage in production
+        urls.push(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`)
+      }
+    }
+    return urls
+  }
+
   // Markers for map
   const markers = suggestions.map((s) => ({
     id: s.id,
@@ -287,6 +311,25 @@ export default function Plan() {
                 }}
               />
             </Suspense>
+            <div className="mt-2">
+              <button
+                className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                onClick={() => {
+                  const urls = getTileUrlsForBounds(mapBounds, mapZoom)
+                  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({ type: 'DOWNLOAD_TILES', urls })
+                  } else if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.ready.then(reg => {
+                      reg.active && reg.active.postMessage({ type: 'DOWNLOAD_TILES', urls })
+                    })
+                  } else {
+                    alert('Service worker not available in this browser')
+                  }
+                }}
+              >
+                Download visible tiles for offline use
+              </button>
+            </div>
             {mapBounds && (
               <div className="text-xs text-gray-500 mt-2">
                 Viewport: [{mapBounds[0][0].toFixed(4)}, {mapBounds[0][1].toFixed(4)}] - [{mapBounds[1][0].toFixed(4)}, {mapBounds[1][1].toFixed(4)}]
