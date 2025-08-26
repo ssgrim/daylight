@@ -141,6 +141,15 @@ class ApiService {
   async healthCheck(): Promise<{ status: string }> {
     return this.request<{ status: string }>('/health')
   }
+
+  // Privacy endpoints
+  async exportData(): Promise<any> {
+    return this.request<any>('/privacy/export')
+  }
+
+  async deleteData(): Promise<any> {
+    return this.request<any>('/privacy/delete', { method: 'POST' })
+  }
 }
 
 export const apiService = new ApiService()
