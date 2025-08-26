@@ -87,3 +87,40 @@ variable "traffic_ssm_parameter" {
   type = string
   default = ""
 }
+
+# Search Infrastructure Variables (Issue #112)
+variable "search_instance_type" {
+  description = "OpenSearch instance type"
+  type        = string
+  default     = "t3.small.search"
+}
+
+variable "search_instance_count" {
+  description = "Number of OpenSearch instances"
+  type        = number
+  default     = 1
+}
+
+variable "search_master_instance_type" {
+  description = "OpenSearch master instance type"
+  type        = string
+  default     = "t3.small.search"
+}
+
+variable "search_volume_size" {
+  description = "OpenSearch EBS volume size (GB)"
+  type        = number
+  default     = 20
+}
+
+variable "enable_vpc_search" {
+  description = "Enable VPC for OpenSearch (production recommended)"
+  type        = bool
+  default     = false
+}
+
+variable "search_admin_token" {
+  description = "Admin token for search administrative operations"
+  type        = string
+  default     = "dev-admin-token"
+}

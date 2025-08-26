@@ -1,0 +1,30 @@
+name: "CodeQL Config"
+
+# Define paths to exclude from analysis
+paths-ignore:
+  - "node_modules/**"
+  - "dist/**"
+  - "build/**"
+  - "target/**"
+  - "*.min.js"
+  - "vendor/**"
+  - "__pycache__/**"
+  - ".git/**"
+
+# Define paths to include (if you want to be specific)
+# paths:
+#   - "src/**"
+#   - "lib/**"
+
+# Custom queries (uncomment to use)
+# queries:
+#   - uses: security-extended
+#   - uses: security-and-quality
+
+# Disable specific queries (if needed)
+# disable-default-queries: false
+
+# Custom query suites
+# query-filters:
+#   - exclude:
+#       id: js/unused-local-variable

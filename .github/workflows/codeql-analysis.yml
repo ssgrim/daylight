@@ -1,0 +1,132 @@
+# Universal CodeQL Analysis Workflow
+# Supports multiple languages and project types
+# Copy this file to .github/workflows/codeql-analysis.yml in any repository
+
+name: "CodeQL Analysis"
+
+on:
+  push:
+    branches: [ "main", "master", "develop", "dev" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    # Run CodeQL analysis weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      # Required for all workflows
+      security-events: write
+      # Required to fetch internal or private CodeQL packs
+      packages: read
+      # Only required for workflows in private repositories
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Auto-detect languages based on repository content
+        # Override this matrix in specific repositories as needed
+        language: [ 'javascript-typescript' ]
+        # CodeQL supports:
+        # - 'c-cpp'
+        # - 'csharp' 
+        # - 'go'
+        # - 'java-kotlin'
+        # - 'javascript-typescript'
+        # - 'python'
+        # - 'ruby'
+        # - 'swift'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Setup language-specific environments
+    - name: Setup Node.js (for JavaScript/TypeScript)
+      if: matrix.language == 'javascript-typescript'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Setup Python (for Python projects)
+      if: matrix.language == 'python'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Setup Java (for Java/Kotlin projects)
+      if: matrix.language == 'java-kotlin'
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Go (for Go projects)
+      if: matrix.language == 'go'
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    # Initialize CodeQL with enhanced security queries
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+        # Use security-extended query suite for comprehensive analysis
+        queries: security-extended,security-and-quality
+        # Custom configuration file (optional)
+        # config-file: ./.github/codeql/codeql-config.yml
+
+    # Language-specific build steps
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+
+    # Manual build steps (uncomment and customize as needed)
+    # - name: Manual Build - Node.js
+    #   if: matrix.language == 'javascript-typescript'
+    #   run: |
+    #     npm ci
+    #     npm run build
+
+    # - name: Manual Build - Python
+    #   if: matrix.language == 'python'
+    #   run: |
+    #     pip install -r requirements.txt
+    #     python -m py_compile **/*.py
+
+    # - name: Manual Build - Java/Kotlin
+    #   if: matrix.language == 'java-kotlin'
+    #   run: |
+    #     ./gradlew build
+
+    # - name: Manual Build - Go
+    #   if: matrix.language == 'go'
+    #   run: |
+    #     go build -v ./...
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:${{matrix.language}}"
+        # Upload results to GitHub Security tab
+        upload: true
+        # Generate SARIF file for external tools
+        output: sarif-results
+        
+    # Optional: Upload SARIF file as artifact
+    - name: Upload SARIF file
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: codeql-sarif-${{ matrix.language }}
+        path: sarif-results
+        retention-days: 30
