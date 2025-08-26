@@ -157,7 +157,13 @@ resource "aws_lambda_function" "trips" {
   runtime          = "nodejs20.x"
   filename         = "${var.backend_zip_dir}/trips.zip"
   source_code_hash = filebase64sha256("${var.backend_zip_dir}/trips.zip")
-  environment { variables = { TABLE_TRIPS = aws_dynamodb_table.trips.name } }
+  environment { 
+    variables = { 
+      TABLE_TRIPS = aws_dynamodb_table.trips.name
+      COGNITO_USER_POOL_ID = aws_cognito_user_pool.users.id
+      COGNITO_CLIENT_ID = aws_cognito_user_pool_client.web_client.id
+    } 
+  }
 }
 
 resource "aws_lambda_function" "plan" {
@@ -300,6 +306,35 @@ resource "aws_apigatewayv2_route" "post_trips" {
   api_id    = aws_apigatewayv2_api.api.id
   route_key = "POST /trips"
   target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_auth.id
+}
+
+resource "aws_apigatewayv2_route" "get_trips" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /trips"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_auth.id
+}
+
+resource "aws_apigatewayv2_route" "get_trip_by_id" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /trips/{tripId}"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_auth.id
+}
+
+resource "aws_apigatewayv2_route" "put_trip" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "PUT /trips/{tripId}"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_auth.id
+}
+
+resource "aws_apigatewayv2_route" "delete_trip" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "DELETE /trips/{tripId}"
+  target    = "integrations/${aws_apigatewayv2_integration.trips.id}"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito_auth.id
 }
 
 resource "aws_lambda_permission" "allow_apigw_trips" {
@@ -307,7 +342,7 @@ resource "aws_lambda_permission" "allow_apigw_trips" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.trips.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*/trips"
+  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*/*"
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -316,7 +351,148 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
+# --- Cognito User Pool for Authentication ---
+resource "aws_cognito_user_pool" "users" {
+  name = "daylight-users-${random_pet.suffix.id}"
+
+  # Password policy
+  password_policy {
+    minimum_length    = 8
+    require_lowercase = true
+    require_numbers   = true
+    require_symbols   = true
+    require_uppercase = true
+  }
+
+  # User attributes
+  schema {
+    name                = "email"
+    attribute_data_type = "String"
+    required            = true
+    mutable             = true
+  }
+
+  schema {
+    name                = "given_name"
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+  }
+
+  schema {
+    name                = "family_name"
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+  }
+
+  # Custom attribute for user role (viewer, editor, owner)
+  schema {
+    name                = "user_role"
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+    developer_only_attribute = false
+  }
+
+  # Account recovery
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  # Email verification
+  auto_verified_attributes = ["email"]
+  username_attributes      = ["email"]
+
+  # Email configuration
+  email_configuration {
+    email_sending_account = "COGNITO_DEFAULT"
+  }
+
+  # User pool policies
+  admin_create_user_config {
+    allow_admin_create_user_only = false
+  }
+
+  tags = {
+    Name        = "daylight-users-${random_pet.suffix.id}"
+    Environment = var.stage
+  }
+}
+
+resource "aws_cognito_user_pool_client" "web_client" {
+  name         = "daylight-web-client-${random_pet.suffix.id}"
+  user_pool_id = aws_cognito_user_pool.users.id
+
+  # OAuth settings
+  generate_secret                      = false  # Public client for SPA
+  prevent_user_existence_errors        = "ENABLED"
+  enable_token_revocation             = true
+  enable_propagate_additional_user_context_data = false
+
+  # Auth flows
+  explicit_auth_flows = [
+    "ALLOW_USER_SRP_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_PASSWORD_AUTH"
+  ]
+
+  # Token validity
+  access_token_validity  = 60   # 1 hour
+  id_token_validity     = 60   # 1 hour  
+  refresh_token_validity = 30  # 30 days
+
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
+
+  # Allowed OAuth flows and scopes
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_scopes                 = ["email", "openid", "profile"]
+
+  # Callback URLs for local dev and production
+  callback_urls = [
+    "http://localhost:5173/auth/callback",
+    "https://${aws_cloudfront_distribution.cdn.domain_name}/auth/callback"
+  ]
+
+  logout_urls = [
+    "http://localhost:5173/auth/logout",
+    "https://${aws_cloudfront_distribution.cdn.domain_name}/auth/logout"
+  ]
+
+  supported_identity_providers = ["COGNITO"]
+}
+
+resource "aws_cognito_user_pool_domain" "auth_domain" {
+  domain       = "daylight-auth-${random_pet.suffix.id}"
+  user_pool_id = aws_cognito_user_pool.users.id
+}
+
+# API Gateway Authorizer
+resource "aws_apigatewayv2_authorizer" "cognito_auth" {
+  api_id          = aws_apigatewayv2_api.api.id
+  authorizer_type = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name            = "cognito-authorizer"
+
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.web_client.id]
+    issuer   = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
+  }
+}
+
 # --- Outputs ---
 output "frontend_bucket" { value = aws_s3_bucket.frontend.bucket }
 output "cdn_domain"      { value = aws_cloudfront_distribution.cdn.domain_name }
 output "api_base_url"    { value = aws_apigatewayv2_api.api.api_endpoint }
+output "cognito_user_pool_id" { value = aws_cognito_user_pool.users.id }
+output "cognito_client_id" { value = aws_cognito_user_pool_client.web_client.id }
+output "cognito_domain" { value = aws_cognito_user_pool_domain.auth_domain.domain }
+output "cognito_region" { value = var.region }
