@@ -1,4 +1,3 @@
-
 import { Link } from 'react-router-dom'
 import { t, useLocale, type Locale } from '../i18n'
 import { useAuthStore } from '../stores/authStore'
@@ -37,16 +36,22 @@ export default function Root() {
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
-            
+            <h1 className="text-2xl font-bold text-gray-900">
+              {t('title')}
+            </h1>
+
             <div className="flex items-center space-x-4">
               {/* Language selector */}
               <div className="flex items-center">
-                <label className="mr-2 text-sm text-gray-600">Lang:</label>
-                <select 
-                  value={locale} 
-                  onChange={e => setLocale(e.target.value as Locale)} 
+                <label htmlFor="language-selector" className="mr-2 text-sm text-gray-600">
+                  Lang:
+                </label>
+                <select
+                  id="language-selector"
+                  value={locale}
+                  onChange={(e) => setLocale(e.target.value as Locale)}
                   className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="Select language"
                 >
                   <option value="en">EN</option>
                   <option value="es">ES</option>
@@ -57,8 +62,8 @@ export default function Root() {
               {isAuthenticated && user ? (
                 <UserMenu />
               ) : (
-                <Link 
-                  to="/auth" 
+                <Link
+                  to="/auth"
                   className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   Sign In
@@ -72,13 +77,19 @@ export default function Root() {
       {/* Main content */}
       <main className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div className="text-center">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">{t('title')}</h2>
-          <p className="text-xl text-gray-600 mb-8">{t('slogan')}</p>
-          
+          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            Welcome to Daylight
+          </h2>
+          <p className="text-xl text-gray-600 mb-8">
+            {t('slogan')}
+          </p>
+
           {isAuthenticated && user ? (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 max-w-md mx-auto">
               <div className="mb-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Welcome back!</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Welcome back!
+                </h3>
                 <p className="text-gray-600">
                   Signed in as <strong>{user.name || user.email}</strong>
                 </p>
@@ -86,9 +97,9 @@ export default function Root() {
                   Role: {user.user_role || 'viewer'}
                 </p>
               </div>
-              
-              <Link 
-                to="/plan" 
+
+              <Link
+                to="/plan"
                 className="inline-flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {t('openPlanner')}
@@ -99,8 +110,8 @@ export default function Root() {
               <p className="text-gray-600 mb-4">
                 Sign in to access your trip planner and manage your travel itineraries.
               </p>
-              <Link 
-                to="/auth" 
+              <Link
+                to="/auth"
                 className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 Get Started

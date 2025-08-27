@@ -10,12 +10,16 @@
     "test": "vitest",
     "test:ui": "vitest --ui"
   },
+  "license": "MIT",
   "dependencies": {
     "@aws-amplify/auth": "^6.15.0",
     "@aws-amplify/core": "^6.13.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "idb": "^7.1.1",
+    "maplibre-gl": "^2.4.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "react-router-dom": "^6.26.1",
+    "supercluster": "^7.1.4",
     "zustand": "^4.5.7"
   },
   "devDependencies": {

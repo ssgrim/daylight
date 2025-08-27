@@ -127,6 +127,36 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // Privacy endpoints for Data Subject Requests (dev only)
+    if (req.url && req.url.startsWith('/privacy')) {
+      const url = new URL(req.url, `http://localhost`)
+      const path = url.pathname
+      try {
+        const { exportData, deleteData } = await import('./src/handlers/privacy.mjs')
+        if (path === '/privacy/export' && req.method === 'GET') {
+          const result = await exportData({ requestContext: { http: { method: 'GET' } }, headers: req.headers, requestId: `${Date.now()}` })
+          const headers = Object.assign({}, defaultCors, result.headers || { 'content-type': 'application/json' })
+          res.writeHead(result.statusCode || 200, headers)
+          res.end(result.body)
+          return
+        }
+        if (path === '/privacy/delete' && req.method === 'POST') {
+          let body = ''
+          for await (const chunk of req) body += chunk
+          const event = { requestContext: { http: { method: 'POST' } }, headers: req.headers, requestId: `${Date.now()}`, body }
+          const result = await deleteData(event)
+          const headers = Object.assign({}, defaultCors, result.headers || { 'content-type': 'application/json' })
+          res.writeHead(result.statusCode || 200, headers)
+          res.end(result.body)
+          return
+        }
+      } catch (e) {
+        res.writeHead(500, defaultCors)
+        res.end(String(e))
+        return
+      }
+    }
+
     // Admin cache endpoint for local dev: GET returns metrics, POST invalidates
     if (req.url && req.url.startsWith('/__cache')) {
       const url = new URL(req.url, `http://localhost`)
@@ -183,7 +213,7 @@ const server = http.createServer(async (req, res) => {
           }
           if (payload.type) {
             const ok = await invalidateCacheFor(payload.type, payload.key)
-            res.writeHead(ok ? 200 : 500, defaultCors)
+            res.writeHead(ok ? 200 : 500)
             res.end(JSON.stringify({ invalidated: !!ok }))
             return
           }
@@ -248,6 +278,56 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: String(err) }))
         return
       }
+    }
+
+    if (req.url && req.url.startsWith('/routes/optimize')) {
+      if (req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        try {
+          const { stops } = JSON.parse(body);
+          const { optimizeRoute } = await import('./src/lib/routeOptimizer.js');
+          const result = optimizeRoute(stops);
+          const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' });
+          res.writeHead(200, headers);
+          res.end(JSON.stringify(result));
+          return;
+        } catch (e) {
+          res.writeHead(500, defaultCors);
+          res.end(String(e));
+          return;
+        }
+      }
+      res.writeHead(405, defaultCors);
+      res.end('Method Not Allowed');
+      return;
+    }
+
+    if (req.url && req.url.startsWith('/search/advanced')) {
+      if (req.method === 'GET') {
+        const url = new URL(req.url, `http://localhost`);
+        const query = Object.fromEntries(url.searchParams.entries());
+        try {
+          const { advancedSearch } = await import('./src/handlers/searchAdmin.js');
+          const mockReq = { query };
+          const mockRes = {
+            json: (data) => {
+              const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' });
+              res.writeHead(200, headers);
+              res.end(JSON.stringify(data));
+            },
+          };
+          advancedSearch(mockReq, mockRes);
+          return;
+        } catch (e) {
+          res.writeHead(500, defaultCors);
+          res.end(String(e));
+          return;
+        }
+      }
+      res.writeHead(405, defaultCors);
+      res.end('Method Not Allowed');
+      return;
     }
 
     res.writeHead(404, defaultCors)

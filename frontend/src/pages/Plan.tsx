@@ -44,11 +44,50 @@ export default function Plan() {
   const [mapCenter, setMapCenter] = useState<[number, number]>([Number(latInput), Number(lngInput)])
   const [mapZoom, setMapZoom] = useState(10)
   const [mapBounds, setMapBounds] = useState<[[number, number], [number, number]] | null>(null)
+  const [regions, setRegions] = useState<Array<{ id: string; name: string; urls: string[]; createdAt: number }>>([])
+  const [downloadingRegionId, setDownloadingRegionId] = useState<string | null>(null)
 
   // Update map center when lat/lng input changes
   useEffect(() => {
     setMapCenter([Number(latInput), Number(lngInput)])
   }, [latInput, lngInput])
+
+  // Helper to compute slippy map tile x,y from lat/lng and zoom
+  const lat2tile = (lat: number, zoom: number) => {
+    const z = Math.pow(2, zoom)
+    const xtile = Math.floor(((lngInput ? Number(lngInput) : 0) + 180) / 360 * z)
+    const ytile = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * z)
+    return { x: xtile, y: ytile }
+  }
+
+  const getTileUrlsForBounds = (bounds: [[number, number], [number, number]] | null, zoom: number) => {
+    if (!bounds) return []
+    const [sw, ne] = bounds
+    const min = lat2tile(ne[0], Math.round(zoom))
+    const max = lat2tile(sw[0], Math.round(zoom))
+    const urls: string[] = []
+    const z = Math.round(zoom)
+    for (let x = Math.min(min.x, max.x); x <= Math.max(min.x, max.x); x++) {
+      for (let y = Math.min(min.y, max.y); y <= Math.max(min.y, max.y); y++) {
+        // Using OSM tile server for dev; respect tile usage in production
+        urls.push(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`)
+      }
+    }
+    return urls
+  }
+
+    // Regions management helpers (using tilesDb)
+    useEffect(() => {
+      ;(async () => {
+        try {
+          const mod = await import('../lib/tilesDb')
+          const rs = await mod.listRegions()
+          setRegions(rs || [])
+        } catch (e) {
+          // ignore
+        }
+      })()
+    }, [])
 
   // Markers for map
   const markers = suggestions.map((s) => ({
@@ -86,7 +125,7 @@ export default function Plan() {
   const fetchWithCoords = async (lat: number, lng: number) => {
     setLoading(true)
     setError(null)
-    const base = (import.meta as any).env?.VITE_API_BASE || ''
+    const base = process.env.VITE_API_BASE || '';
     const url = `${base}/plan?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
     try {
       const res = await fetch(url)
@@ -146,153 +185,238 @@ export default function Plan() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Link to="/" className="text-2xl font-bold text-gray-900">
-                {t('title')}
-              </Link>
-              <span className="text-gray-500">•</span>
-              <h1 className="text-xl font-medium text-gray-700">{t('planner')}</h1>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              {/* Language selector */}
-              <div className="flex items-center">
-                <label className="mr-2 text-sm text-gray-600">Lang:</label>
-                <select 
-                  value={locale} 
-                  onChange={e => setLocale(e.target.value as Locale)} 
-                  className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="en">EN</option>
-                  <option value="es">ES</option>
-                </select>
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center space-x-4">
+                <Link to="/" className="text-2xl font-bold text-gray-900">
+                  {t('title')}
+                </Link>
+                <span className="text-gray-500">
+                  •
+                </span>
+                <h1 className="text-xl font-medium text-gray-700">
+                  {t('planner')}
+                </h1>
               </div>
 
-              <UserMenu />
+              <div className="flex items-center space-x-4">
+                {/* Language selector */}
+                <div className="flex items-center">
+                  <label htmlFor="language-selector" className="mr-2 text-sm text-gray-600">
+                    Lang:
+                  </label>
+                  <select
+                    id="language-selector"
+                    value={locale}
+                    onChange={(e) => setLocale(e.target.value as Locale)}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="en">EN</option>
+                    <option value="es">ES</option>
+                  </select>
+                </div>
+
+                <UserMenu />
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Trip Management Section */}
-        {user && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">My Trips</h2>
-              <button
-                onClick={() => setShowCreateTrip(!showCreateTrip)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                Create Trip
-              </button>
-            </div>
-
-            {showCreateTrip && (
-              <div className="mb-4 p-4 bg-gray-50 rounded-md">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Trip Title
-                    </label>
-                    <input
-                      type="text"
-                      value={newTripTitle}
-                      onChange={(e) => setNewTripTitle(e.target.value)}
-                      placeholder="Enter trip title"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Description (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={newTripDescription}
-                      onChange={(e) => setNewTripDescription(e.target.value)}
-                      placeholder="Enter trip description"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                <div className="mt-4 flex space-x-2">
-                  <button
-                    onClick={handleCreateTrip}
-                    disabled={!newTripTitle.trim()}
-                    className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Create
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowCreateTrip(false)
-                      setNewTripTitle('')
-                      setNewTripDescription('')
-                    }}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                  >
-                    Cancel
-                  </button>
-                </div>
+        <div className="max-w-7xl mx-auto p-6">
+          {/* Trip Management Section */}
+          {user && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">My Trips</h2>
+                <button
+                  onClick={() => setShowCreateTrip(!showCreateTrip)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Create Trip
+                </button>
               </div>
-            )}
 
-            {tripsLoading ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-gray-600 mt-2 text-sm">Loading trips...</p>
-              </div>
-            ) : trips.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {trips.map((trip) => (
-                  <div key={trip.id} className="border border-gray-200 rounded-md p-4 hover:shadow-md transition-shadow">
-                    <h3 className="font-medium text-gray-900 mb-1">{trip.title}</h3>
-                    {trip.description && (
-                      <p className="text-sm text-gray-600 mb-2">{trip.description}</p>
-                    )}
-                    <div className="text-xs text-gray-500">
-                      <p>Created: {new Date(trip.createdAt).toLocaleDateString()}</p>
-                      <p>Locations: {trip.locations.length}</p>
-                      <p className="capitalize">Visibility: {trip.isPublic ? 'Public' : 'Private'}</p>
+              {showCreateTrip && (
+                <div className="mb-4 p-4 bg-gray-50 rounded-md">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Trip Title
+                      </label>
+                      <input
+                        type="text"
+                        value={newTripTitle}
+                        onChange={(e) => setNewTripTitle(e.target.value)}
+                        placeholder="Enter trip title"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Description (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={newTripDescription}
+                        onChange={(e) => setNewTripDescription(e.target.value)}
+                        placeholder="Enter trip description"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <p>No trips created yet. Create your first trip to get started!</p>
-              </div>
-            )}
-          </div>
-        )}
+                  <div className="mt-4 flex space-x-2">
+                    <button
+                      onClick={handleCreateTrip}
+                      disabled={!newTripTitle.trim()}
+                      className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Create
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCreateTrip(false)
+                        setNewTripTitle('')
+                        setNewTripDescription('')
+                      }}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
-        {/* Map Section */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Explore Location</h2>
-          <div className="mb-4">
-            <Suspense fallback={<MapLoader />}>
-              <Map
-                center={mapCenter}
-                zoom={mapZoom}
-                markers={markers}
-                onViewportChange={(center, zoom, bounds) => {
-                  setMapCenter(center)
-                  setMapZoom(zoom)
-                  setMapBounds(bounds)
-                }}
-              />
-            </Suspense>
-            {mapBounds && (
-              <div className="text-xs text-gray-500 mt-2">
-                Viewport: [{mapBounds[0][0].toFixed(4)}, {mapBounds[0][1].toFixed(4)}] - [{mapBounds[1][0].toFixed(4)}, {mapBounds[1][1].toFixed(4)}]
+              {tripsLoading ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-gray-600 mt-2 text-sm">Loading trips...</p>
+                </div>
+              ) : trips.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {trips.map((trip) => (
+                    <div key={trip.id} className="border border-gray-200 rounded-md p-4 hover:shadow-md transition-shadow">
+                      <h3 className="font-medium text-gray-900 mb-1">{trip.title}</h3>
+                      {trip.description && (
+                        <p className="text-sm text-gray-600 mb-2">{trip.description}</p>
+                      )}
+                      <div className="text-xs text-gray-500">
+                        <p>Created: {new Date(trip.createdAt).toLocaleDateString()}</p>
+                        <p>Locations: {trip.locations.length}</p>
+                        <p className="capitalize">Visibility: {trip.isPublic ? 'Public' : 'Private'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No trips created yet. Create your first trip to get started!</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Map Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Explore Location</h2>
+            <div className="mb-4">
+              <Suspense fallback={<MapLoader />}>
+                <Map
+                  center={mapCenter}
+                  zoom={mapZoom}
+                  markers={markers}
+                  onViewportChange={(center, zoom, bounds) => {
+                    setMapCenter(center)
+                    setMapZoom(zoom)
+                    setMapBounds(bounds)
+                  }}
+                />
+              </Suspense>
+              <div className="mt-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                    onClick={async () => {
+                      const urls = getTileUrlsForBounds(mapBounds, mapZoom)
+                      if (urls.length === 0) return alert('No tiles calculated for current viewport')
+                      const id = `region-${Date.now()}`
+                      setDownloadingRegionId(id)
+                      // save region metadata first
+                      try {
+                        const mod = await import('../lib/tilesDb')
+                        await mod.putRegion(id, { name: `Region ${new Date().toLocaleString()}`, urls, zoom: mapZoom, bounds: mapBounds })
+                        setRegions((r) => [...r, { id, name: `Region ${new Date().toLocaleString()}`, urls, createdAt: Date.now() }])
+                      } catch (e) {
+                        // ignore
+                      }
+                      // trigger SW download
+                      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({ type: 'DOWNLOAD_TILES', urls })
+                      } else if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.ready.then(reg => {
+                          reg.active && reg.active.postMessage({ type: 'DOWNLOAD_TILES', urls })
+                        })
+                      } else {
+                        alert('Service worker not available in this browser')
+                      }
+                      setDownloadingRegionId(null)
+                    }}
+                  >
+                    Download visible tiles for offline use
+                  </button>
+
+                  <div className="text-sm text-gray-500">{regions.length} offline region(s)</div>
+                </div>
               </div>
-            )}
-          </div>
+              {mapBounds && (
+                <div className="text-xs text-gray-500 mt-2">
+                  Viewport: [{mapBounds[0][0].toFixed(4)}, {mapBounds[0][1].toFixed(4)}] - [{mapBounds[1][0].toFixed(4)}, {mapBounds[1][1].toFixed(4)}]
+                </div>
+              )}
+            </div>
+
+            {/* Regions management */}
+            <div className="mt-4 bg-gray-50 p-4 rounded">
+              <h3 className="text-sm font-medium mb-2">Offline Regions</h3>
+              {regions.length === 0 ? (
+                <div className="text-sm text-gray-500">No regions downloaded yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {regions.map(r => (
+                    <div key={r.id} className="flex items-center justify-between border border-gray-200 rounded p-2">
+                      <div>
+                        <div className="font-medium text-sm">{r.name}</div>
+                        <div className="text-xs text-gray-500">Tiles: {r.urls.length} • Downloaded: {new Date(r.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-2 py-1 text-sm bg-red-600 text-white rounded"
+                          onClick={async () => {
+                            if (!confirm('Delete this region and its cached tiles?')) return
+                            try {
+                              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                                navigator.serviceWorker.controller.postMessage({ type: 'DELETE_REGION', urls: r.urls })
+                              } else if ('serviceWorker' in navigator) {
+                                const reg = await navigator.serviceWorker.ready
+                                reg.active && reg.active.postMessage({ type: 'DELETE_REGION', urls: r.urls })
+                              }
+                              const mod = await import('../lib/tilesDb')
+                              await mod.deleteRegion(r.id)
+                              setRegions(rs => rs.filter(x => x.id !== r.id))
+                            } catch (e) {
+                              // ignore
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
           {/* Location controls */}
           <div className="flex flex-wrap gap-2 items-center mb-4">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useAuthStore } from '../stores/authStore'
 import { AuthService } from '../services/authService'
+import { apiService } from '../services/apiService'
 
 export default function UserMenu() {
   const { user, logout } = useAuthStore()
@@ -67,6 +68,44 @@ export default function UserMenu() {
             className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
           >
             {isLoggingOut ? 'Signing out...' : 'Sign out'}
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                setIsOpen(false)
+                const data = await apiService.exportData()
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `daylight-data-export-${Date.now()}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+              } catch (e) {
+                alert('Failed to export data')
+              }
+            }}
+            className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            Export my data
+          </button>
+
+          <button
+            onClick={async () => {
+              if (!confirm('Delete your account data? This is irreversible.')) return
+              try {
+                setIsOpen(false)
+                await apiService.deleteData()
+                alert('Delete request submitted')
+                // optionally sign out
+                logout()
+              } catch (e) {
+                alert('Failed to delete data')
+              }
+            }}
+            className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-gray-100"
+          >
+            Delete my data
           </button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useAuthStore } from '../stores/authStore'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.daylight.example.com'
+// Core API functionality
+const API_BASE = 'https://api.daylight.example.com'
 
 export interface Trip {
   id: string
@@ -29,6 +30,21 @@ export interface CreateTripRequest {
 
 export interface UpdateTripRequest extends Partial<CreateTripRequest> {
   id: string
+}
+
+export interface Stop {
+  id: string
+  name: string
+  location: {
+    lat: number
+    lng: number
+  }
+}
+
+export interface RouteResult {
+  optimizedOrder: Stop[]
+  totalDistance: number
+  totalDuration: number
 }
 
 class ApiService {
@@ -140,6 +156,23 @@ class ApiService {
   // Health check
   async healthCheck(): Promise<{ status: string }> {
     return this.request<{ status: string }>('/health')
+  }
+
+  // Privacy endpoints
+  async exportData(): Promise<any> {
+    return this.request<any>('/privacy/export')
+  }
+
+  async deleteData(): Promise<any> {
+    return this.request<any>('/privacy/delete', { method: 'POST' })
+  }
+
+  // Route Optimization API
+  async optimizeRoute(stops: Stop[]): Promise<RouteResult> {
+    return this.request<RouteResult>('/routes/optimize', {
+      method: 'POST',
+      body: JSON.stringify({ stops })
+    });
   }
 }
 
