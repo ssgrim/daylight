@@ -4,10 +4,10 @@ import { User } from '../stores/authStore'
 
 // Get configuration from environment
 const getAuthConfig = () => {
-  const region = import.meta.env.VITE_AWS_REGION || 'us-east-1'
-  const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID
-  const userPoolClientId = import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID
-  const cognitoDomain = import.meta.env.VITE_COGNITO_DOMAIN
+  const region = process.env.VITE_AWS_REGION || 'us-east-1'
+  const userPoolId = process.env.VITE_COGNITO_USER_POOL_ID
+  const userPoolClientId = process.env.VITE_COGNITO_USER_POOL_CLIENT_ID
+  const cognitoDomain = process.env.VITE_COGNITO_DOMAIN
 
   if (!userPoolId || !userPoolClientId || !cognitoDomain) {
     throw new Error('Missing required Cognito configuration. Please check your environment variables.')

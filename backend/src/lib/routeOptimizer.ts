@@ -76,6 +76,54 @@ function calculateRouteScore(
     averageRating: ratings.length > 0 ? averageRating : undefined
   };
 }
+
+// Extend multi-objective scoring function
+function extendedCalculateRouteScore(
+  stops: Stop[],
+  totalDistance: number,
+  totalTime: number,
+  violations: string[],
+  weights: { distance: number; time: number; cost: number; rating: number } = { distance: 0.3, time: 0.3, cost: 0.2, rating: 0.2 }
+): { score: number; totalCost?: number; averageRating?: number } {
+  const maxDistance = 100000; // 100km max
+  const maxTime = 43200; // 12 hours max
+  const maxCost = 50000; // $500 max
+
+  const distanceScore = Math.max(0, 1 - totalDistance / maxDistance);
+  const timeScore = Math.max(0, 1 - totalTime / maxTime);
+
+  const costs = stops.map((s) => s.cost || 0);
+  const totalCost = costs.reduce((sum, c) => sum + c, 0);
+  const costScore = Math.max(0, 1 - totalCost / maxCost);
+
+  const ratings = stops.filter((s) => s.rating).map((s) => s.rating!);
+  const averageRating =
+    ratings.length > 0 ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length : 3;
+  const ratingScore = averageRating / 5;
+
+  const violationPenalty = violations.length * 0.1;
+
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      (
+        distanceScore * weights.distance +
+        timeScore * weights.time +
+        costScore * weights.cost +
+        ratingScore * weights.rating
+      ) * 100 -
+        violationPenalty * 100
+    )
+  );
+
+  return {
+    score,
+    totalCost: totalCost > 0 ? totalCost : undefined,
+    averageRating: ratings.length > 0 ? averageRating : undefined,
+  };
+}
+
 // Brute-force TSP for small N (MVP, N <= 8)
 function permute<T>(arr: T[]): T[][] {
   if (arr.length <= 1) return [arr];
@@ -261,5 +309,97 @@ function simulatedAnnealingSolve(stops: Stop[], tripStart: number, weights?: { d
     score: scoring.score,
     totalCost: scoring.totalCost,
     averageRating: scoring.averageRating
+  };
+}
+
+// Refined simulated annealing solver for larger N
+function refinedSimulatedAnnealingSolve(stops: Stop[], tripStart: number, weights?: { distance: number; time: number; cost: number; rating: number }): RouteResult {
+  const start = stops[0];
+  const rest = stops.slice(1);
+
+  // Greedy nearest neighbor for a better initial solution
+  const seed: Stop[] = [start];
+  const pool = rest.slice();
+  while (pool.length) {
+    const last = seed[seed.length - 1];
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < pool.length; i++) {
+      const d = haversine(last.lat, last.lon, pool[i].lat, pool[i].lon);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    seed.push(pool.splice(bestIdx, 1)[0]);
+  }
+
+  let current = seed;
+  let currentDist = routeDistance(current);
+  let currentViolations: string[] = [];
+  let t = tripStart;
+  for (let i = 0; i < current.length - 1; i++) {
+    t += haversine(current[i].lat, current[i].lon, current[i + 1].lat, current[i + 1].lon) / 15;
+    const tw = current[i + 1].timeWindow;
+    if (tw) {
+      const [s, e] = tw;
+      if (t < s || t > e) {
+        currentViolations.push(`Stop ${current[i + 1].id} arrival ${Math.round(t)} outside time window [${s}, ${e}]`);
+      }
+    }
+  }
+
+  const { score: currentScore } = calculateRouteScore(current, currentDist, currentDist / 15, currentViolations, weights);
+  let best = current.slice();
+  let bestScore = currentScore;
+  let bestViolations = currentViolations.slice();
+
+  // SA parameters
+  let T = 1.0;
+  const T_MIN = 1e-4;
+  const alpha = 0.995;
+  const iterations = Math.min(20000, 2000 * stops.length);
+
+  for (let iter = 0; iter < iterations && T > T_MIN; iter++) {
+    const candidate = randomSwap(current);
+    const candDist = routeDistance(candidate);
+    let t2 = tripStart;
+    const candViol: string[] = [];
+    for (let i = 0; i < candidate.length - 1; i++) {
+      t2 += haversine(candidate[i].lat, candidate[i].lon, candidate[i + 1].lat, candidate[i + 1].lon) / 15;
+      const tw = candidate[i + 1].timeWindow;
+      if (tw) {
+        const [s, e] = tw;
+        if (t2 < s || t2 > e) {
+          candViol.push(`Stop ${candidate[i + 1].id} arrival ${Math.round(t2)} outside time window [${s}, ${e}]`);
+        }
+      }
+    }
+    const { score: candScore } = calculateRouteScore(candidate, candDist, candDist / 15, candViol, weights);
+    const delta = candScore - currentScore;
+    if (delta > 0 || Math.exp(delta / (T * 100)) > Math.random()) {
+      current = candidate;
+      currentDist = candDist;
+      currentViolations = candViol;
+    }
+    if (candScore > bestScore) {
+      best = candidate.slice();
+      bestScore = candScore;
+      bestViolations = candViol.slice();
+    }
+    T *= alpha;
+  }
+
+  const totalDistance = routeDistance(best);
+  const totalTime = totalDistance / 15;
+  const scoring = calculateRouteScore(best, totalDistance, totalTime, bestViolations, weights);
+  return {
+    order: best.map((s) => s.id),
+    totalDistance,
+    totalTime,
+    violations: bestViolations.length ? bestViolations : undefined,
+    score: scoring.score,
+    totalCost: scoring.totalCost,
+    averageRating: scoring.averageRating,
   };
 }

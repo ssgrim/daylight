@@ -213,7 +213,7 @@ const server = http.createServer(async (req, res) => {
           }
           if (payload.type) {
             const ok = await invalidateCacheFor(payload.type, payload.key)
-            res.writeHead(ok ? 200 : 500, defaultCors)
+            res.writeHead(ok ? 200 : 500)
             res.end(JSON.stringify({ invalidated: !!ok }))
             return
           }
@@ -278,6 +278,56 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: String(err) }))
         return
       }
+    }
+
+    if (req.url && req.url.startsWith('/routes/optimize')) {
+      if (req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        try {
+          const { stops } = JSON.parse(body);
+          const { optimizeRoute } = await import('./src/lib/routeOptimizer.js');
+          const result = optimizeRoute(stops);
+          const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' });
+          res.writeHead(200, headers);
+          res.end(JSON.stringify(result));
+          return;
+        } catch (e) {
+          res.writeHead(500, defaultCors);
+          res.end(String(e));
+          return;
+        }
+      }
+      res.writeHead(405, defaultCors);
+      res.end('Method Not Allowed');
+      return;
+    }
+
+    if (req.url && req.url.startsWith('/search/advanced')) {
+      if (req.method === 'GET') {
+        const url = new URL(req.url, `http://localhost`);
+        const query = Object.fromEntries(url.searchParams.entries());
+        try {
+          const { advancedSearch } = await import('./src/handlers/searchAdmin.js');
+          const mockReq = { query };
+          const mockRes = {
+            json: (data) => {
+              const headers = Object.assign({}, defaultCors, { 'content-type': 'application/json' });
+              res.writeHead(200, headers);
+              res.end(JSON.stringify(data));
+            },
+          };
+          advancedSearch(mockReq, mockRes);
+          return;
+        } catch (e) {
+          res.writeHead(500, defaultCors);
+          res.end(String(e));
+          return;
+        }
+      }
+      res.writeHead(405, defaultCors);
+      res.end('Method Not Allowed');
+      return;
     }
 
     res.writeHead(404, defaultCors)

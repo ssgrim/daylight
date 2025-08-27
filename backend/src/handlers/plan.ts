@@ -65,6 +65,8 @@ async function planHandler(event: any) {
     error({ requestId }, 'plan handler error', err)
     return { statusCode: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify([{ id:'1', title:'Demo Stop', start:now, end:now, score:95, reason: `enrich failed: ${err.message}` }]) }
   }
+
+  return { statusCode: 200, body: JSON.stringify({ message: 'Plan endpoint operational' }) };
 }
 
 export const handler = (event: any) => capturePromise('plan.handler', () => planHandler(event))

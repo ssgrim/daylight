@@ -1,0 +1,4 @@
+Type checking frontend...
+src/components/Map.tsx(31,7): error TS18047: 'map' is possibly 'null'.
+src/components/Map.tsx(45,27): error TS18047: 'map' is possibly 'null'.
+src/components/Map.tsx(52,63): error TS18047: 'map' is possibly 'null'.

@@ -1,3 +1,4 @@
+import React from 'react'; // Ensure React is imported for JSX support
 import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import '@testing-library/jest-dom'
@@ -10,6 +11,6 @@ describe('Root page', () => {
         <Root />
       </BrowserRouter>
     )
-    expect(screen.getByText(/daylight/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/daylight/i)
   })
 })
